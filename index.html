@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestionnaire Playlist TV</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Configuration de votre TV</h1>
+        
+        <!-- Affichage des infos TV -->
+        <div class="info-box">
+            <p>Adresse MAC : <span id="mac-address">Chargement...</span></p>
+            <p>Mot de passe : <span id="password">Chargement...</span></p>
+        </div>
+
+        <!-- Formulaire playlist -->
+        <div class="form-group">
+            <label for="playlist-url">URL de la playlist (.m3u) :</label>
+            <input type="url" id="playlist-url" placeholder="https://exemple.com/playlist.m3u">
+            <button id="submit-btn">Envoyer à la TV</button>
+        </div>
+
+        <!-- QR Code de secours -->
+        <div id="qrcode"></div>
+    </div>
+</body>
+</html>
