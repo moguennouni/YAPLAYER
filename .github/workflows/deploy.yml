@@ -2,12 +2,15 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
+  contents: write
   pages: write
   id-token: write
+ 
+
 
 jobs:
   deploy:
@@ -19,23 +22,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Important pour éviter les problèmes de liens
 
-      - name: Clean repository
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+        
+      - name: Build (optionnel)
         run: |
-          # Supprime tous les fichiers inutiles
-          rm -rf .gitignore README.md .github/workflows/test.yml *.log
-          find . -name "*.tmp" -delete
+          echo "Aucune compilation nécessaire pour HTML statique"
+          # Pour des projets avec build : npm run build
 
-      - name: Upload minimal artifacts
-        uses: actions/upload-pages-artifact@v2
+      - name: Upload files
+        uses: actions/upload-artifact@v4
         with:
+          name: github-pages  # <-- Nom attendu par deploy-pages
           path: |
-            index.html
-            style.css
-            script.js
-          retention-days: 1
+            *.html
+            *.css
+            *.js
 
       - name: Deploy
-        uses: actions/deploy-pages@v2
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages
