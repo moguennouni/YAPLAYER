@@ -39,6 +39,13 @@ jobs:
             *.html
             *.css
             *.js
+            exclude: |
+              .gitignore
+              README.md
+              .github/
+              node_modules/
+              *.log
+              *.tmp
 
       - name: Deploy
         id: deployment
