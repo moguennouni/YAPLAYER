@@ -36,16 +36,9 @@ jobs:
         with:
           name: github-pages  # <-- Nom attendu par deploy-pages
           path: |
-            *.html
-            *.css
-            *.js
-            exclude: |
-              .gitignore
-              README.md
-              .github/
-              node_modules/
-              *.log
-              *.tmp
+            index.html
+            style.css
+            script.js
 
       - name: Deploy
         id: deployment
