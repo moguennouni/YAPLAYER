@@ -23,6 +23,11 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v3
+        
+      - name: Build (optionnel)
+        run: |
+          echo "Aucune compilation nécessaire pour HTML statique"
+          # Pour des projets avec build : npm run build
 
       - name: Upload files
         uses: actions/upload-artifact@v4  # Dernière version stable
