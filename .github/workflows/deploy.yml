@@ -35,7 +35,10 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           name: github-pages  # <-- Nom attendu par deploy-pages
-
+          path: |
+            *.html
+            *.css
+            *.js
 
       - name: Deploy
         id: deployment
