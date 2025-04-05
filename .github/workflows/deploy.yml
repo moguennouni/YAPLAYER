@@ -32,7 +32,7 @@ jobs:
           # Pour des projets avec build : npm run build
 
       - name: Upload files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-pages-artifact@v3
         with:
           name: github-pages  # <-- Nom attendu par deploy-pages
           path: |
