@@ -26,13 +26,20 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v3
         
+      - name: Verify files exist
+        run: |
+          ls -la
+          [ -f index.html ] || exit 1
+          [ -f style.css ] || exit 1
+          [ -f script.js ] || exit 1
+          
       - name: Build (optionnel)
         run: |
           echo "Aucune compilation nécessaire pour HTML statique"
           # Pour des projets avec build : npm run build
 
       - name: Upload files
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v2
         with:
           name: github-pages  # <-- Nom attendu par deploy-pages
           path: |
