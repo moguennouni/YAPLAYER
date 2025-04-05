@@ -39,7 +39,7 @@ jobs:
           # Pour des projets avec build : npm run build
 
       - name: Upload files
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: github-pages  # <-- Nom attendu par deploy-pages
           path: |
