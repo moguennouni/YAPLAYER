@@ -1,11 +1,11 @@
 /*** Configuration Firebase ***/
 const firebaseConfig = {
-    apiKey: "AIzaSyA...VotreCléAPI",
-    authDomain: "votre-projet.firebaseapp.com",
-    databaseURL: "https://votre-projet.firebaseio.com",
-    projectId: "votre-projet",
-    storageBucket: "votre-projet.appspot.com",
-    messagingSenderId: "1234567890"
+    apiKey: "AIzaSyAHsaBpOlvvKrhORo3F7bsMW8tflXwcEFE",
+    authDomain: "yaplayer-ca754.firebaseapp.com",
+    databaseURL: "https://yaplayer-ca754-default-rtdb.firebaseio.com",
+    projectId: "yaplayer-ca754",
+    storageBucket: "yaplayer-ca754.firebasestorage.app",
+    messagingSenderId: "70098606492"
 };
 
 // Initialisation
