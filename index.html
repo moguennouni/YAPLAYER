@@ -3,57 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YAPLAYER</title>
+    <title>YAPLAYER - Authentification</title>
     <link rel="stylesheet" href="style.css">
-    <script src="script.js" defer></script>
 </head>
-    <script>
-  // Configuration Firebase (à personnaliser)
-  const firebaseConfig = {
-    apiKey: "AIzaSyA...VotreCléAPI",
-    authDomain: "votre-projet.firebaseapp.com",
-    databaseURL: "https://votre-projet.firebaseio.com",
-    projectId: "votre-projet",
-    storageBucket: "votre-projet.appspot.com",
-    messagingSenderId: "1234567890"
-  };
-
-  // Initialisation
-  firebase.initializeApp(firebaseConfig);
-  const database = firebase.database();
-
-  // Fonction pour sauvegarder les données
-  function saveData() {
-    const mac = document.getElementById('mac').value;
-    const password = document.getElementById('password').value;
-    const playlist = document.getElementById('playlist-url').value;
-
-    database.ref('devices/' + mac).set({
-      password: password,
-      playlist: playlist,
-      last_updated: firebase.database.ServerValue.TIMESTAMP
-    }).then(() => alert("Données sauvegardées !"));
-  }
-</script>
 <body>
-    <div class="container">
-        <h1>Configuration de votre TV</h1>
-        
-        <!-- Affichage des infos TV -->
-        <div class="info-box">
-            <p>Adresse MAC : <span id="mac-address">Chargement...</span></p>
-            <p>Mot de passe : <span id="password">Chargement...</span></p>
-        </div>
-
-        <!-- Formulaire playlist -->
+    <div class="auth-container" id="auth-container">
+        <h1>Authentification</h1>
         <div class="form-group">
-            <label for="playlist-url">URL de la playlist (.m3u) :</label>
-            <input type="url" id="playlist-url" placeholder="https://exemple.com/playlist.m3u">
-            <button id="submit-btn">Envoyer à la TV</button>
+            <label for="input-mac">Adresse MAC :</label>
+            <input type="text" id="input-mac" placeholder="00:11:22:33:44:55">
         </div>
-
-        <!-- QR Code de secours -->
-        <div id="qrcode"></div>
+        <div class="form-group">
+            <label for="input-password">Mot de passe :</label>
+            <input type="password" id="input-password">
+        </div>
+        <button id="login-btn">Se connecter</button>
     </div>
+
+    <div class="playlist-container" id="playlist-container" style="display:none;">
+        <h1>Gestion de playlist</h1>
+        <div class="client-info">
+            <p>MAC: <span id="display-mac"></span></p>
+        </div>
+        <div class="form-group">
+            <label for="playlist-url">URL Playlist M3U :</label>
+            <input type="url" id="playlist-url" placeholder="https://exemple.com/playlist.m3u">
+        </div>
+        <button id="save-btn">Enregistrer</button>
+    </div>
+
+    <!-- Chargement des scripts en fin de body -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
