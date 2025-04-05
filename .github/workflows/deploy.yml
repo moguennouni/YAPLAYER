@@ -32,9 +32,9 @@ jobs:
           # Pour des projets avec build : npm run build
 
       - name: Upload files
-        uses: actions/upload-artifact@v4  # Dernière version stable
+        uses: actions/upload-artifact@v4
         with:
-          name: web-artifacts
+          name: github-pages  # <-- Nom attendu par deploy-pages
           path: |
             *.html
             *.css
@@ -44,4 +44,4 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
         with:
-          artifact_name: web-artifacts
+          artifact_name: github-pages
