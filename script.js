@@ -1,43 +1,88 @@
-// Récupère les paramètres de l'URL
-const urlParams = new URLSearchParams(window.location.search);
-const macAddress = urlParams.get('mac');
-const password = urlParams.get('password');
+/*** Configuration Firebase ***/
+const firebaseConfig = {
+    apiKey: "AIzaSyA...VotreCléAPI",
+    authDomain: "votre-projet.firebaseapp.com",
+    databaseURL: "https://votre-projet.firebaseio.com",
+    projectId: "votre-projet",
+    storageBucket: "votre-projet.appspot.com",
+    messagingSenderId: "1234567890"
+};
 
-// Affiche les données TV
-document.getElementById('mac-address').textContent = macAddress || 'Non disponible';
-document.getElementById('password').textContent = password || 'Non disponible';
+// Initialisation
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
 
-// Gestion du formulaire
-document.getElementById('submit-btn').addEventListener('click', () => {
-    const playlistUrl = document.getElementById('playlist-url').value;
+/*** Gestion de l'interface ***/
+document.addEventListener('DOMContentLoaded', () => {
+    const authContainer = document.getElementById('auth-container');
+    const playlistContainer = document.getElementById('playlist-container');
+    const loginBtn = document.getElementById('login-btn');
+    const saveBtn = document.getElementById('save-btn');
+
+    // Gestion authentification
+    loginBtn.addEventListener('click', handleLogin);
     
+    // Gestion playlist
+    saveBtn.addEventListener('click', handleSavePlaylist);
+});
+
+async function handleLogin() {
+    const mac = document.getElementById('input-mac').value.trim();
+    const password = document.getElementById('input-password').value.trim();
+
+    if (!mac || !password) {
+        alert('Veuillez remplir tous les champs');
+        return;
+    }
+
+    try {
+        const snapshot = await database.ref('devices/' + mac).once('value');
+        
+        if (snapshot.exists()) {
+            if (snapshot.val().password === password) {
+                showPlaylistManager(mac);
+            } else {
+                alert('Mot de passe incorrect');
+            }
+        } else {
+            await database.ref('devices/' + mac).set({
+                password: password,
+                playlist: "",
+                last_updated: firebase.database.ServerValue.TIMESTAMP
+            });
+            showPlaylistManager(mac);
+        }
+    } catch (error) {
+        console.error("Erreur Firebase:", error);
+        alert('Erreur de connexion');
+    }
+}
+
+function handleSavePlaylist() {
+    const mac = document.getElementById('display-mac').textContent;
+    const playlistUrl = document.getElementById('playlist-url').value.trim();
+
     if (!playlistUrl) {
         alert('Veuillez entrer une URL valide');
         return;
     }
 
-    // Envoi des données à votre backend (exemple avec Firebase)
-    fetch('https://votre-backend.com/api/playlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mac: macAddress, password, playlistUrl })
-    })
-    .then(response => response.json())
-    .then(data => {
-        alert('Playlist envoyée avec succès !');
-    })
-    .catch(error => {
-        console.error('Erreur:', error);
-        alert('Échec de l\'envoi');
-    });
-});
+    database.ref('devices/' + mac).update({
+        playlist: playlistUrl,
+        last_updated: firebase.database.ServerValue.TIMESTAMP
+    }).then(() => alert('Playlist enregistrée !'));
+}
 
-// Génère un QR Code si les paramètres sont présents
-if (macAddress && password) {
-    const qrData = `${window.location.origin}${window.location.pathname}?mac=${macAddress}&password=${password}`;
-    new QRCode(document.getElementById('qrcode'), {
-        text: qrData,
-        width: 150,
-        height: 150
+function showPlaylistManager(mac) {
+    document.getElementById('display-mac').textContent = mac;
+    document.getElementById('auth-container').style.display = 'none';
+    document.getElementById('playlist-container').style.display = 'block';
+    
+    // Charger la playlist existante
+    database.ref('devices/' + mac).once('value').then((snapshot) => {
+        const data = snapshot.val();
+        if (data?.playlist) {
+            document.getElementById('playlist-url').value = data.playlist;
+        }
     });
 }
