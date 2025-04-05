@@ -7,6 +7,34 @@
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
+    <script>
+  // Configuration Firebase (à personnaliser)
+  const firebaseConfig = {
+    apiKey: "AIzaSyA...VotreCléAPI",
+    authDomain: "votre-projet.firebaseapp.com",
+    databaseURL: "https://votre-projet.firebaseio.com",
+    projectId: "votre-projet",
+    storageBucket: "votre-projet.appspot.com",
+    messagingSenderId: "1234567890"
+  };
+
+  // Initialisation
+  firebase.initializeApp(firebaseConfig);
+  const database = firebase.database();
+
+  // Fonction pour sauvegarder les données
+  function saveData() {
+    const mac = document.getElementById('mac').value;
+    const password = document.getElementById('password').value;
+    const playlist = document.getElementById('playlist-url').value;
+
+    database.ref('devices/' + mac).set({
+      password: password,
+      playlist: playlist,
+      last_updated: firebase.database.ServerValue.TIMESTAMP
+    }).then(() => alert("Données sauvegardées !"));
+  }
+</script>
 <body>
     <div class="container">
         <h1>Configuration de votre TV</h1>
