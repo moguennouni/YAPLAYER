@@ -1,35 +1,31 @@
 name: Deploy to GitHub Pages
 
-on:
-  push:
-    branches: [ "main" ]  # Déclencheur : push sur la branche main
-  workflow_dispatch:      # Permet un déclenchement manuel
+on: [push, workflow_dispatch]
+
+permissions:  # <-- Ajoutez cette section
+  contents: write
+  pages: write
+  id-token: write
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest  # Machine virtuelle Ubuntu
-
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
     steps:
-      # Étape 1 : Récupération du code
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Étape 2 : Installation des dépendances (si nécessaire)
-      - name: Install dependencies
-        run: |
-          npm install -g qrcode
-          npm install
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
 
-      # Étape 3 : Construction du projet (exemple si vous utilisez un builder)
-      - name: Build
-        run: |
-          echo "Aucune étape de build nécessaire pour ce projet HTML statique"
-          # Pour un projet avec React/Vue : npm run build
-
-      # Étape 4 : Déploiement sur GitHub Pages
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}  # Token automatique
-          publish_dir: ./            # Dossier à déployer (racine)
-          keep_files: false          # Écrase les fichiers existants
+          path: './'  # Chemin vers vos fichiers
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v2
