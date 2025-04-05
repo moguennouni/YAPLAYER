@@ -22,10 +22,12 @@ jobs:
         uses: actions/configure-pages@v3
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v2
-        with:
-          path: './'  # Chemin vers vos fichiers
-
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/upload-artifact@v4  # <-- Version majeure mise à jour
+  with:
+    name: web-deploy
+    path: |
+      ./index.html
+      ./style.css
+      ./script.js
+    retention-days: 3
+     
