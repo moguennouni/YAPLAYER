@@ -1,42 +1,48 @@
-body {
-    font-family: 'Arial', sans-serif;
-    background-color: #f5f5f5;
-    margin: 0;
-    padding: 20px;
-}
-
-.container {
-    max-width: 800px;
-    margin: 0 auto;
+/* Nouveaux styles */
+.auth-container, .playlist-container {
+    max-width: 500px;
+    margin: 50px auto;
+    padding: 30px;
     background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.1);
 }
 
-.info-box {
-    background: #eef;
+.client-info {
+    background: #f0f8ff;
     padding: 15px;
     border-radius: 5px;
     margin-bottom: 20px;
 }
 
-.form-group {
-    margin-bottom: 15px;
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
 }
 
+input[type="text"],
+input[type="password"],
 input[type="url"] {
     width: 100%;
-    padding: 10px;
+    padding: 12px;
+    margin-bottom: 20px;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 5px;
+    box-sizing: border-box;
 }
 
 button {
-    background: #0066cc;
+    width: 100%;
+    padding: 12px;
+    background-color: #4285f4;
     color: white;
     border: none;
-    padding: 10px 15px;
-    border-radius: 4px;
+    border-radius: 5px;
     cursor: pointer;
+    font-size: 16px;
+}
+
+button:hover {
+    background-color: #3367d6;
 }
