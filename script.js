@@ -1,3 +1,16 @@
+// En tout début de script.js
+window.togglePasswordVisibility = function() {
+    const passwordInput = document.getElementById('input-password');
+    const eyeIcon = document.getElementById('eye-icon');
+    
+    if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        eyeIcon.classList.replace('fa-eye', 'fa-eye-slash');
+    } else {
+        passwordInput.type = 'password';
+        eyeIcon.classList.replace('fa-eye-slash', 'fa-eye');
+    }
+};
 /*** Configuration Firebase ***/
 const firebaseConfig = {
     apiKey: "AIzaSyAHsaBpOlvvKrhORo3F7bsMW8tflXwcEFE",
@@ -27,12 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
     saveBtn.addEventListener('click', handleSavePlaylist);
 });
 document.addEventListener('DOMContentLoaded', () => {
-// Ajoutez ce nouvel écouteur :
-
-function togglePasswordVisibility() {
-    document.getElementById('toggle-password-btn')?.addEventListener('click', togglePasswordVisibility);
-});
-
 
     const passwordInput = document.getElementById('input-password');
     if (passwordInput.type === 'password') {
