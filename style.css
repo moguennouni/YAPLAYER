@@ -1,84 +1,175 @@
-/* Nouveaux styles */
-.auth-container, .playlist-container {
-    max-width: 500px;
-    margin: 50px auto;
-    padding: 30px;
-    background: white;
-    border-radius: 10px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+/* Variables CSS pour une cohérence globale */
+:root {
+    --primary-color: #4285f4;
+    --primary-hover: #3367d6;
+    --secondary-color: #f1f1f1;
+    --secondary-hover: #ddd;
+    --danger-color: #ff4444;
+    --danger-hover: #cc0000;
+    --text-color: #333;
+    --light-bg: #f8f9fa;
+    --border-radius: 8px;
+    --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
+/* Reset et polices */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f5f5f5;
+    color: var(--text-color);
+    line-height: 1.6;
+    margin: 0;
+    padding: 20px;
+}
+
+/* Conteneurs */
+.auth-container, .playlist-container {
+    max-width: 500px;
+    margin: 30px auto;
+    padding: 30px;
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    transition: transform 0.3s ease;
+}
+
+.auth-container:hover, .playlist-container:hover {
+    transform: translateY(-5px);
+}
+
+/* Client info */
 .client-info {
-    background: #f0f8ff;
+    background: var(--light-bg);
     padding: 15px;
-    border-radius: 5px;
+    border-radius: var(--border-radius);
+    margin-bottom: 25px;
+    border-left: 4px solid var(--primary-color);
+}
+
+/* Formulaires */
+.form-group {
     margin-bottom: 20px;
 }
 
 label {
     display: block;
     margin-bottom: 8px;
-    font-weight: bold;
+    font-weight: 600;
+    color: #555;
 }
 
 input[type="text"],
 input[type="password"],
 input[type="url"] {
     width: 100%;
-    padding: 12px;
-    margin-bottom: 20px;
+    padding: 12px 15px;
+    margin-bottom: 15px;
     border: 1px solid #ddd;
-    border-radius: 5px;
+    border-radius: var(--border-radius);
     box-sizing: border-box;
+    font-size: 16px;
+    transition: border 0.3s;
 }
 
+input:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+}
+
+/* Gestion mot de passe */
 .password-container {
     position: relative;
 }
 
 .toggle-password {
     position: absolute;
-    right: 10px;
+    right: 12px;
     top: 12px;
     cursor: pointer;
     user-select: none;
+    opacity: 0.6;
+    transition: opacity 0.2s;
 }
 
+.toggle-password:hover {
+    opacity: 1;
+}
+
+/* Boutons */
 button {
     width: 100%;
     padding: 12px;
-    background-color: #4285f4;
-    color: white;
     border: none;
-    border-radius: 5px;
+    border-radius: var(--border-radius);
     cursor: pointer;
     font-size: 16px;
+    font-weight: 600;
+    transition: all 0.3s;
     margin-bottom: 10px;
 }
 
-button:hover {
-    background-color: #3367d6;
+button.primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+button.primary:hover {
+    background-color: var(--primary-hover);
 }
 
 button.secondary {
-    background-color: #f1f1f1;
-    color: #333;
+    background-color: var(--secondary-color);
+    color: var(--text-color);
 }
 
 button.secondary:hover {
-    background-color: #ddd;
+    background-color: var(--secondary-hover);
 }
 
+button.danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+button.danger:hover {
+    background-color: var(--danger-hover);
+}
+
+/* Playlists */
 .playlist-item {
-    background: #f9f9f9;
+    background: white;
     padding: 15px;
-    border-radius: 5px;
+    border-radius: var(--border-radius);
     margin-bottom: 15px;
     border: 1px solid #eee;
+    box-shadow: var(--box-shadow);
+}
+
+.playlist-item h4 {
+    margin: 0 0 5px 0;
+    color: var(--primary-color);
 }
 
 .playlist-actions {
     display: flex;
     gap: 10px;
     margin-top: 10px;
+}
+
+.playlist-actions button {
+    flex: 1;
+    padding: 8px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .auth-container, .playlist-container {
+        margin: 20px 10px;
+        padding: 20px;
+    }
+    
+    .playlist-actions {
+        flex-direction: column;
+    }
 }
