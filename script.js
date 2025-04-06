@@ -151,34 +151,51 @@ function showPlaylistManager(mac) {
     loadPlaylists(mac);
 }
 
+// Modifiez la fonction loadPlaylists
 async function loadPlaylists(mac) {
     const firebaseMac = mac.replace(/:/g, '_');
-    const playlistsContainer = document.getElementById('existing-playlists');
-    playlistsContainer.innerHTML = '<h3>Vos playlists</h3>';
+    const playlistsList = document.getElementById('playlists-list');
+    playlistsList.innerHTML = '';
 
     try {
         const snapshot = await database.ref(`devices/${firebaseMac}/playlists`).once('value');
         const playlists = snapshot.val();
 
-        if (playlists) {
+        if (playlists && Object.keys(playlists).length > 0) {
             Object.entries(playlists).forEach(([name, data]) => {
                 const playlistElement = document.createElement('div');
                 playlistElement.className = 'playlist-item';
                 playlistElement.innerHTML = `
-                    <h4>${name}</h4>
-                    <p>URL: ${data.url}</p>
+                    <h4><i class="fas fa-music"></i> ${name}</h4>
+                    <p><i class="fas fa-link"></i> ${data.url}</p>
+                    <small>Créée le ${new Date(data.created_at).toLocaleDateString()}</small>
                     <div class="playlist-actions">
-                        <button class="secondary" onclick="editPlaylist('${name}', '${data.url}')">Modifier</button>
-                        <button class="secondary" onclick="deletePlaylist('${mac}', '${name}')">Supprimer</button>
+                        <button class="secondary" onclick="editPlaylist('${name}', '${data.url}')">
+                            <i class="fas fa-edit"></i> Modifier
+                        </button>
+                        <button class="danger" onclick="deletePlaylist('${mac}', '${name}')">
+                            <i class="fas fa-trash-alt"></i> Supprimer
+                        </button>
                     </div>
                 `;
-                playlistsContainer.appendChild(playlistElement);
+                playlistsList.appendChild(playlistElement);
             });
         } else {
-            playlistsContainer.innerHTML += '<p>Aucune playlist enregistrée</p>';
+            playlistsList.innerHTML = '<p class="no-playlists"><i class="far fa-folder-open"></i> Aucune playlist enregistrée</p>';
         }
     } catch (error) {
         console.error("Erreur chargement:", error);
-        playlistsContainer.innerHTML += '<p>Erreur lors du chargement des playlists</p>';
+        playlistsList.innerHTML = '<p class="error"><i class="fas fa-exclamation-triangle"></i> Erreur lors du chargement</p>';
     }
+}
+
+// Ajoutez ce style pour les messages
+.no-playlists, .error {
+    text-align: center;
+    padding: 15px;
+    color: #666;
+}
+
+.error {
+    color: var(--danger-color);
 }
