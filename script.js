@@ -76,11 +76,10 @@
             }
         }
 
-        async function handleSavePlaylist() {
+       async function handleSavePlaylist() {
     const mac = document.getElementById('display-mac').textContent;
     const playlistUrl = document.getElementById('playlist-url').value.trim();
 
-    // Validation de l'URL
     if (!playlistUrl) {
         alert('Veuillez entrer une URL valide');
         return;
@@ -88,22 +87,26 @@
 
     try {
         const firebaseMac = mac.replace(/:/g, '_');
-        await database.ref('devices/' + firebaseMac).update({
+        const updates = {
             playlist: playlistUrl,
-            last_updated: firebase.database.ServerValue.TIMESTAMP
-        });
-        alert('Playlist enregistrée avec succès !');
+            last_updated: new Date().toISOString()
+        };
         
-        // Recharger les données pour vérification
+        console.log("Tentative d'envoi:", updates); // Debug
+        
+        await database.ref('devices').child(firebaseMac).update(updates);
+        alert('Playlist enregistrée avec succès!');
+        
+        // Vérification
         const snapshot = await database.ref('devices/' + firebaseMac).once('value');
-        console.log("Données après mise à jour:", snapshot.val());
+        console.log("Données confirmées:", snapshot.val());
     } catch (error) {
-        console.error("Erreur détaillée:", {
+        console.error("Erreur complète:", {
             message: error.message,
             code: error.code,
-            details: error.details
+            stack: error.stack
         });
-        alert(`Erreur lors de la sauvegarde: ${error.message}`);
+        alert(`Échec de l'enregistrement: ${error.message}`);
     }
 }
 
