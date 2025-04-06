@@ -1,16 +1,3 @@
-// En tout début de script.js
-window.togglePasswordVisibility = function() {
-    const passwordInput = document.getElementById('input-password');
-    const eyeIcon = document.getElementById('eye-icon');
-    
-    if (passwordInput.type === 'password') {
-        passwordInput.type = 'text';
-        eyeIcon.classList.replace('fa-eye', 'fa-eye-slash');
-    } else {
-        passwordInput.type = 'password';
-        eyeIcon.classList.replace('fa-eye-slash', 'fa-eye');
-    }
-};
 /*** Configuration Firebase ***/
 const firebaseConfig = {
     apiKey: "AIzaSyAHsaBpOlvvKrhORo3F7bsMW8tflXwcEFE",
@@ -39,8 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Gestion playlist
     saveBtn.addEventListener('click', handleSavePlaylist);
 });
-document.addEventListener('DOMContentLoaded', () => {
 
+function togglePasswordVisibility() {
     const passwordInput = document.getElementById('input-password');
     if (passwordInput.type === 'password') {
         passwordInput.type = 'text';
@@ -135,22 +122,6 @@ async function handleSavePlaylist() {
     }
 }
 
-/*** Fonction pour basculer la visibilité du mot de passe ***/
-function togglePasswordVisibility() {
-    const passwordInput = document.getElementById('input-password');
-    const eyeIcon = document.getElementById('eye-icon');
-    
-    if (passwordInput.type === 'password') {
-        passwordInput.type = 'text';
-        eyeIcon.classList.remove('fa-eye');
-        eyeIcon.classList.add('fa-eye-slash');
-    } else {
-        passwordInput.type = 'password';
-        eyeIcon.classList.remove('fa-eye-slash');
-        eyeIcon.classList.add('fa-eye');
-    }
-}
-
 async function deletePlaylist(mac, playlistName) {
     if (!confirm(`Voulez-vous vraiment supprimer la playlist "${playlistName}"?`)) {
         return;
@@ -180,51 +151,34 @@ function showPlaylistManager(mac) {
     loadPlaylists(mac);
 }
 
-// Modifiez la fonction loadPlaylists
 async function loadPlaylists(mac) {
     const firebaseMac = mac.replace(/:/g, '_');
-    const playlistsList = document.getElementById('playlists-list');
-    playlistsList.innerHTML = '';
+    const playlistsContainer = document.getElementById('existing-playlists');
+    playlistsContainer.innerHTML = '<h3>Vos playlists</h3>';
 
     try {
         const snapshot = await database.ref(`devices/${firebaseMac}/playlists`).once('value');
         const playlists = snapshot.val();
 
-        if (playlists && Object.keys(playlists).length > 0) {
+        if (playlists) {
             Object.entries(playlists).forEach(([name, data]) => {
                 const playlistElement = document.createElement('div');
                 playlistElement.className = 'playlist-item';
                 playlistElement.innerHTML = `
-                    <h4><i class="fas fa-music"></i> ${name}</h4>
-                    <p><i class="fas fa-link"></i> ${data.url}</p>
-                    <small>Créée le ${new Date(data.created_at).toLocaleDateString()}</small>
+                    <h4>${name}</h4>
+                    <p>URL: ${data.url}</p>
                     <div class="playlist-actions">
-                        <button class="secondary" onclick="editPlaylist('${name}', '${data.url}')">
-                            <i class="fas fa-edit"></i> Modifier
-                        </button>
-                        <button class="danger" onclick="deletePlaylist('${mac}', '${name}')">
-                            <i class="fas fa-trash-alt"></i> Supprimer
-                        </button>
+                        <button class="secondary" onclick="editPlaylist('${name}', '${data.url}')">Modifier</button>
+                        <button class="secondary" onclick="deletePlaylist('${mac}', '${name}')">Supprimer</button>
                     </div>
                 `;
-                playlistsList.appendChild(playlistElement);
+                playlistsContainer.appendChild(playlistElement);
             });
         } else {
-            playlistsList.innerHTML = '<p class="no-playlists"><i class="far fa-folder-open"></i> Aucune playlist enregistrée</p>';
+            playlistsContainer.innerHTML += '<p>Aucune playlist enregistrée</p>';
         }
     } catch (error) {
         console.error("Erreur chargement:", error);
-        playlistsList.innerHTML = '<p class="error"><i class="fas fa-exclamation-triangle"></i> Erreur lors du chargement</p>';
+        playlistsContainer.innerHTML += '<p>Erreur lors du chargement des playlists</p>';
     }
-}
-
-// Ajoutez ce style pour les messages
-.no-playlists, .error {
-    text-align: center;
-    padding: 15px;
-    color: #666;
-}
-
-.error {
-    color: var(--danger-color);
 }
