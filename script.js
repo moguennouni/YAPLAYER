@@ -77,26 +77,35 @@
         }
 
         async function handleSavePlaylist() {
-            const mac = document.getElementById('display-mac').textContent;
-            const playlistUrl = document.getElementById('playlist-url').value.trim();
+    const mac = document.getElementById('display-mac').textContent;
+    const playlistUrl = document.getElementById('playlist-url').value.trim();
 
-            if (!playlistUrl) {
-                alert('Veuillez entrer une URL valide');
-                return;
-            }
+    // Validation de l'URL
+    if (!playlistUrl) {
+        alert('Veuillez entrer une URL valide');
+        return;
+    }
 
-            try {
-                const firebaseMac = mac.replace(/:/g, '_');
-                await database.ref('devices/' + firebaseMac).update({
-                    playlist: playlistUrl,
-                    last_updated: firebase.database.ServerValue.TIMESTAMP
-                });
-                alert('Playlist enregistrée avec succès !');
-            } catch (error) {
-                console.error("Erreur sauvegarde:", error);
-                alert('Erreur lors de la sauvegarde');
-            }
-        }
+    try {
+        const firebaseMac = mac.replace(/:/g, '_');
+        await database.ref('devices/' + firebaseMac).update({
+            playlist: playlistUrl,
+            last_updated: firebase.database.ServerValue.TIMESTAMP
+        });
+        alert('Playlist enregistrée avec succès !');
+        
+        // Recharger les données pour vérification
+        const snapshot = await database.ref('devices/' + firebaseMac).once('value');
+        console.log("Données après mise à jour:", snapshot.val());
+    } catch (error) {
+        console.error("Erreur détaillée:", {
+            message: error.message,
+            code: error.code,
+            details: error.details
+        });
+        alert(`Erreur lors de la sauvegarde: ${error.message}`);
+    }
+}
 
         function showPlaylistManager(mac) {
             document.getElementById('display-mac').textContent = mac;
