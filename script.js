@@ -36,7 +36,7 @@ async function handleLogin() {
     }
 
     try {
-        const snapshot = await database.ref('devices/' + mac).once('value');
+        const snapshot = await database.ref('devices/macAddress' + mac).once('value');
         
         if (snapshot.exists()) {
             if (snapshot.val().password === password) {
@@ -45,7 +45,7 @@ async function handleLogin() {
                 alert('Mot de passe incorrect');
             }
         } else {
-            await database.ref('devices/' + mac).set({
+            await database.ref('devices/macAddress' + mac).set({
                 password: password,
                 playlist: "",
                 last_updated: firebase.database.ServerValue.TIMESTAMP
@@ -67,7 +67,7 @@ function handleSavePlaylist() {
         return;
     }
 
-    database.ref('devices/' + mac).update({
+    database.ref('devices/macAddress' + mac).update({
         playlist: playlistUrl,
         last_updated: firebase.database.ServerValue.TIMESTAMP
     }).then(() => alert('Playlist enregistrée !'));
@@ -79,7 +79,7 @@ function showPlaylistManager(mac) {
     document.getElementById('playlist-container').style.display = 'block';
     
     // Charger la playlist existante
-    database.ref('devices/' + mac).once('value').then((snapshot) => {
+    database.ref('devices/macAddress' + mac).once('value').then((snapshot) => {
         const data = snapshot.val();
         if (data?.playlist) {
             document.getElementById('playlist-url').value = data.playlist;
