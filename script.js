@@ -1,88 +1,116 @@
-/*** Configuration Firebase ***/
-const firebaseConfig = {
-    apiKey: "AIzaSyAHsaBpOlvvKrhORo3F7bsMW8tflXwcEFE",
-    authDomain: "yaplayer-ca754.firebaseapp.com",
-    databaseURL: "https://yaplayer-ca754-default-rtdb.firebaseio.com",
-    projectId: "yaplayer-ca754",
-    storageBucket: "yaplayer-ca754.firebasestorage.app",
-    messagingSenderId: "70098606492"
-};
+        /*** Configuration Firebase ***/
+        const firebaseConfig = {
+            apiKey: "AIzaSyAHsaBpOlvvKrhORo3F7bsMW8tflXwcEFE",
+            authDomain: "yaplayer-ca754.firebaseapp.com",
+            databaseURL: "https://yaplayer-ca754-default-rtdb.firebaseio.com",
+            projectId: "yaplayer-ca754",
+            storageBucket: "yaplayer-ca754.firebasestorage.app",
+            messagingSenderId: "70098606492",
+            appId: "1:70098606492:web:bb81c8edadc194e1201059"
+        };
 
-// Initialisation
-firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+        // Initialisation Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database(app);
 
-/*** Gestion de l'interface ***/
-document.addEventListener('DOMContentLoaded', () => {
-    const authContainer = document.getElementById('auth-container');
-    const playlistContainer = document.getElementById('playlist-container');
-    const loginBtn = document.getElementById('login-btn');
-    const saveBtn = document.getElementById('save-btn');
+        /*** Gestion de l'interface ***/
+        document.addEventListener('DOMContentLoaded', () => {
+            const authContainer = document.getElementById('auth-container');
+            const playlistContainer = document.getElementById('playlist-container');
+            const loginBtn = document.getElementById('login-btn');
+            const saveBtn = document.getElementById('save-btn');
 
-    // Gestion authentification
-    loginBtn.addEventListener('click', handleLogin);
-    
-    // Gestion playlist
-    saveBtn.addEventListener('click', handleSavePlaylist);
-});
+            // Gestion authentification
+            loginBtn.addEventListener('click', handleLogin);
+            
+            // Gestion playlist
+            saveBtn.addEventListener('click', handleSavePlaylist);
+        });
 
-async function handleLogin() {
-    const mac = document.getElementById('input-mac').value.trim();
-    const password = document.getElementById('input-password').value.trim();
+        async function handleLogin() {
+            const macInput = document.getElementById('input-mac');
+            const passwordInput = document.getElementById('input-password');
+            
+            const mac = macInput.value.trim().toUpperCase();
+            const password = passwordInput.value.trim();
 
-    if (!mac || !password) {
-        alert('Veuillez remplir tous les champs');
-        return;
-    }
-
-    try {
-        const snapshot = await database.ref('devices/macAddress' + mac).once('value');
-        
-        if (snapshot.exists()) {
-            if (snapshot.val().password === password) {
-                showPlaylistManager(mac);
-            } else {
-                alert('Mot de passe incorrect');
+            // Validation MAC (format XX:XX:XX:XX:XX:XX)
+            const macRegex = /^([0-9A-F]{2}[:]){5}([0-9A-F]{2})$/;
+            if (!macRegex.test(mac)) {
+                alert('Format MAC invalide. Utilisez le format XX:XX:XX:XX:XX:XX');
+                return;
             }
-        } else {
-            await database.ref('devices/macAddress' + mac).set({
-                password: password,
-                playlist: "",
-                last_updated: firebase.database.ServerValue.TIMESTAMP
+
+            if (!password) {
+                alert('Veuillez entrer un mot de passe');
+                return;
+            }
+
+            try {
+                // Convertir MAC pour Firebase (remplace : par _)
+                const firebaseMac = mac.replace(/:/g, '_');
+                const deviceRef = database.ref('devices/' + firebaseMac);
+                const snapshot = await deviceRef.once('value');
+                
+                if (snapshot.exists()) {
+                    // Vérification mot de passe
+                    if (snapshot.val().password === password) {
+                        showPlaylistManager(mac);
+                    } else {
+                        alert('Mot de passe incorrect');
+                        passwordInput.focus();
+                    }
+                } else {
+                    // Nouvel appareil
+                    await deviceRef.set({
+                        macAddress: mac,  // Stocké avec :
+                        password: password,
+                        playlist: "",
+                        last_updated: firebase.database.ServerValue.TIMESTAMP
+                    });
+                    showPlaylistManager(mac);
+                }
+            } catch (error) {
+                console.error("Erreur Firebase:", error);
+                alert('Erreur de connexion au serveur');
+            }
+        }
+
+        async function handleSavePlaylist() {
+            const mac = document.getElementById('display-mac').textContent;
+            const playlistUrl = document.getElementById('playlist-url').value.trim();
+
+            if (!playlistUrl) {
+                alert('Veuillez entrer une URL valide');
+                return;
+            }
+
+            try {
+                const firebaseMac = mac.replace(/:/g, '_');
+                await database.ref('devices/' + firebaseMac).update({
+                    playlist: playlistUrl,
+                    last_updated: firebase.database.ServerValue.TIMESTAMP
+                });
+                alert('Playlist enregistrée avec succès !');
+            } catch (error) {
+                console.error("Erreur sauvegarde:", error);
+                alert('Erreur lors de la sauvegarde');
+            }
+        }
+
+        function showPlaylistManager(mac) {
+            document.getElementById('display-mac').textContent = mac;
+            document.getElementById('auth-container').style.display = 'none';
+            document.getElementById('playlist-container').style.display = 'block';
+            
+            // Charger la playlist existante
+            const firebaseMac = mac.replace(/:/g, '_');
+            database.ref('devices/' + firebaseMac).once('value').then((snapshot) => {
+                const data = snapshot.val();
+                if (data?.playlist) {
+                    document.getElementById('playlist-url').value = data.playlist;
+                }
+            }).catch(error => {
+                console.error("Erreur chargement:", error);
             });
-            showPlaylistManager(mac);
         }
-    } catch (error) {
-        console.error("Erreur Firebase:", error);
-        alert('Erreur de connexion');
-    }
-}
-
-function handleSavePlaylist() {
-    const mac = document.getElementById('display-mac').textContent;
-    const playlistUrl = document.getElementById('playlist-url').value.trim();
-
-    if (!playlistUrl) {
-        alert('Veuillez entrer une URL valide');
-        return;
-    }
-
-    database.ref('devices/macAddress' + mac).update({
-        playlist: playlistUrl,
-        last_updated: firebase.database.ServerValue.TIMESTAMP
-    }).then(() => alert('Playlist enregistrée !'));
-}
-
-function showPlaylistManager(mac) {
-    document.getElementById('display-mac').textContent = mac;
-    document.getElementById('auth-container').style.display = 'none';
-    document.getElementById('playlist-container').style.display = 'block';
-    
-    // Charger la playlist existante
-    database.ref('devices/macAddress' + mac).once('value').then((snapshot) => {
-        const data = snapshot.val();
-        if (data?.playlist) {
-            document.getElementById('playlist-url').value = data.playlist;
-        }
-    });
-}
