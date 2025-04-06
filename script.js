@@ -122,6 +122,22 @@ async function handleSavePlaylist() {
     }
 }
 
+/*** Fonction pour basculer la visibilité du mot de passe ***/
+function togglePasswordVisibility() {
+    const passwordInput = document.getElementById('input-password');
+    const eyeIcon = document.getElementById('eye-icon');
+    
+    if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        eyeIcon.classList.remove('fa-eye');
+        eyeIcon.classList.add('fa-eye-slash');
+    } else {
+        passwordInput.type = 'password';
+        eyeIcon.classList.remove('fa-eye-slash');
+        eyeIcon.classList.add('fa-eye');
+    }
+}
+
 async function deletePlaylist(mac, playlistName) {
     if (!confirm(`Voulez-vous vraiment supprimer la playlist "${playlistName}"?`)) {
         return;
