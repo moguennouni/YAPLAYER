@@ -15,7 +15,10 @@
         </div>
         <div class="form-group">
             <label for="input-password">Mot de passe :</label>
-            <input type="password" id="input-password">
+            <div class="password-container">
+                <input type="password" id="input-password">
+                <span class="toggle-password" onclick="togglePasswordVisibility()">👁️</span>
+            </div>
         </div>
         <button id="login-btn">Se connecter</button>
     </div>
@@ -25,6 +28,15 @@
         <div class="client-info">
             <p>MAC: <span id="display-mac"></span></p>
         </div>
+        
+        <div class="existing-playlists" id="existing-playlists">
+            <!-- Les playlists existantes seront ajoutées ici dynamiquement -->
+        </div>
+        
+        <div class="form-group">
+            <label for="playlist-name">Nom de la playlist :</label>
+            <input type="text" id="playlist-name" placeholder="Ma playlist préférée">
+        </div>
         <div class="form-group">
             <label for="playlist-url">URL Playlist M3U :</label>
             <input type="url" id="playlist-url" placeholder="https://exemple.com/playlist.m3u">
@@ -32,7 +44,6 @@
         <button id="save-btn">Enregistrer</button>
     </div>
 
-    <!-- Chargement des scripts en fin de body -->
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
     <script src="script.js"></script>
