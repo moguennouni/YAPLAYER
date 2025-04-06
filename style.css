@@ -32,6 +32,18 @@ input[type="url"] {
     box-sizing: border-box;
 }
 
+.password-container {
+    position: relative;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 10px;
+    top: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
 button {
     width: 100%;
     padding: 12px;
@@ -41,8 +53,32 @@ button {
     border-radius: 5px;
     cursor: pointer;
     font-size: 16px;
+    margin-bottom: 10px;
 }
 
 button:hover {
     background-color: #3367d6;
+}
+
+button.secondary {
+    background-color: #f1f1f1;
+    color: #333;
+}
+
+button.secondary:hover {
+    background-color: #ddd;
+}
+
+.playlist-item {
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+    border: 1px solid #eee;
+}
+
+.playlist-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
 }
