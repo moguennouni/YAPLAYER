@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YAPLAYER - Authentification</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <div class="auth-container" id="auth-container">
@@ -18,11 +16,9 @@
         <div class="form-group">
             <label for="input-password">Mot de passe :</label>
             <div class="password-container">
-    <input type="password" id="input-password" placeholder="Votre mot de passe">
-    <span class="toggle-password" id="toggle-password-btn">
-        <i class="far fa-eye" id="eye-icon"></i>
-    </span>
-</div>
+                <input type="password" id="input-password">
+                <span class="toggle-password" onclick="togglePasswordVisibility()">👁️</span>
+            </div>
         </div>
         <button id="login-btn">Se connecter</button>
     </div>
@@ -34,9 +30,6 @@
         </div>
         
         <div class="existing-playlists" id="existing-playlists">
-    <h3><i class="fas fa-list"></i> Vos playlists</h3>
-    <div id="playlists-list"></div>
-</div>
             <!-- Les playlists existantes seront ajoutées ici dynamiquement -->
         </div>
         
