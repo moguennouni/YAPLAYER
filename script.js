@@ -26,8 +26,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Gestion playlist
     saveBtn.addEventListener('click', handleSavePlaylist);
 });
+document.addEventListener('DOMContentLoaded', () => {
+// Ajoutez ce nouvel écouteur :
 
 function togglePasswordVisibility() {
+    document.getElementById('toggle-password-btn')?.addEventListener('click', togglePasswordVisibility);
+});
+
+
     const passwordInput = document.getElementById('input-password');
     if (passwordInput.type === 'password') {
         passwordInput.type = 'text';
