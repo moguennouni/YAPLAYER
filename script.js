@@ -44,7 +44,7 @@ async function handleLogin() {
     const password = passwordInput.value.trim();
 
     // Validation MAC (format XX:XX:XX:XX:XX:XX)
-    const macRegex = /^([0-9A-F]{2}[:]){5}([0-9A-F]{2})$/;
+    const macRegex = /^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$/;
     if (!macRegex.test(mac)) {
         alert('Format MAC invalide. Utilisez le format XX:XX:XX:XX:XX:XX');
         return;
