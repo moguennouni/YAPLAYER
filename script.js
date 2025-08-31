@@ -21,7 +21,7 @@ function togglePasswordVisibility(){const i=document.getElementById('input-passw
 /*** Helpers ***/
 const macToKey = mac => mac.replace(/:/g,'_');
 const isValidMac = mac => /^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$/.test(mac);
-const isPushKey  = k => /^-[-A-Za-z0-9_]{10,}$/.test(k||""); // style Firebase push key
+const isPushKey  = k => /^-[-A-Za-z0-9_]{10,}$/.test(k||""); // push key Firebase
 
 /*** Auth ***/
 async function handleLogin(){
@@ -41,7 +41,7 @@ async function handleLogin(){
   } else {
     await ref.set({
       mac, password, playlists: {},
-      metadata:{ created_at: Date.now(), last_updated: Date.now() }
+      metadata:{ created_at: Date.now(), last_updated: Date.now(), active_playlist_id: null }
     });
     showPlaylistManager(mac);
   }
@@ -54,10 +54,10 @@ function showPlaylistManager(mac){
   loadPlaylists(mac, /*attemptMigrate=*/true);
 }
 
-/*** Règles "active" ***/
-// - La première playlist créée devient active
-// - Ajouter d'autres playlists ne change rien au statut actif courant
-// - Supprimer la playlist active => la suivante la plus ancienne devient active
+/*** Règles “active” ***/
+// 1ère playlist créée => active
+// Ajouter d’autres playlists ne change pas l’active
+// Supprimer la playlist active => la plus ancienne restante devient active
 async function setActivePlaylist(mac, playlistId) {
   const key = macToKey(mac);
   const baseRef = database.ref(`devices/${key}`);
@@ -65,21 +65,19 @@ async function setActivePlaylist(mac, playlistId) {
 
   const snap = await listRef.once('value');
   const node = snap.val() || {};
-
   if (!node[playlistId]) return;
 
   const updates = {};
-  // tout passer à false
   Object.keys(node).forEach(pid => {
     updates[`playlists/${pid}/active`] = (pid === playlistId);
   });
-  // méta
   const now = Date.now();
   updates[`metadata/active_playlist_id`] = playlistId;
   updates[`metadata/activated_at`] = now;
   updates[`metadata/last_updated`] = now;
 
   await baseRef.update(updates);
+  await loadPlaylists(mac);
 }
 
 async function handleSavePlaylist(){
@@ -92,33 +90,28 @@ async function handleSavePlaylist(){
   const key = macToKey(mac);
   const baseRef = database.ref(`devices/${key}`);
   const listRef = baseRef.child('playlists');
-  const allSnap = await listRef.once('value');
-  const exists = allSnap.exists();
-  const hasActive = exists && Object.values(allSnap.val()||{}).some(p => p && p.active === true);
 
-  // création playlist
+  const allSnap = await listRef.once('value');
+  const already = allSnap.val() || {};
+  const hasActive = Object.values(already).some(p => p && p.active === true);
+
   const newRef  = listRef.push(); // => ID unique
-  const nowIso = new Date().toISOString();
   const payload = {
     id: newRef.key,
     name, url,
-    created_at: nowIso,
-    active: false // sera activée uniquement si c'est la toute première
+    created_at: new Date().toISOString(),
+    active: false
   };
   await newRef.set(payload);
 
-  // si c'est la première playlist => elle devient active
   if (!hasActive) {
-    await setActivePlaylist(mac, newRef.key);
+    await setActivePlaylist(mac, newRef.key); // 1ère => active
   } else {
-    // Sinon on met juste à jour last_updated
     await baseRef.child('metadata/last_updated').set(Date.now());
   }
 
-  // UI
   document.getElementById('playlist-name').value = '';
   document.getElementById('playlist-url').value = '';
-  await loadPlaylists(mac);
   alert('Playlist enregistrée');
 }
 
@@ -131,7 +124,7 @@ async function migrateOldPlaylistsIfNeeded(mac){
 
   let migrated = 0;
   for (const oldKey of Object.keys(node)){
-    if (isPushKey(oldKey)) continue;
+    if (isPushKey(oldKey)) continue; // déjà ID
     const val = node[oldKey];
     const url = (val && (val.url || val.playlist_url)) || null;
     if (!url) continue;
@@ -139,22 +132,50 @@ async function migrateOldPlaylistsIfNeeded(mac){
     const name = (val && (val.name || val.playlist_name)) || oldKey;
     const newRef = listRef.push();
     const payload = {
-      id: newRef.key,
-      name,
-      url,
+      id: newRef.key, name, url,
       created_at: (val && val.created_at) || new Date().toISOString(),
-      active: !!val.active // si ancien avait un flag actif, on le propage
+      active: !!val.active
     };
     await newRef.set(payload);
     await listRef.child(oldKey).remove();
     migrated++;
   }
-
   if (migrated > 0){
     await database.ref(`devices/${key}/metadata/last_updated`).set(Date.now());
-    console.log(`✅ Migration → ${migrated} élément(s) converti(s) en clés ID.`);
+    console.log(`✅ Migration: ${migrated} item(s) converti(s) en clés ID.`);
   }
   return migrated > 0;
+}
+
+async function ensureOneActiveIfMissing(mac){
+  const key = macToKey(mac);
+  const baseRef = database.ref(`devices/${key}`);
+  const listSnap = await baseRef.child('playlists').once('value');
+  const node = listSnap.val() || {};
+  const ids = Object.keys(node);
+  if (ids.length === 0) return;
+
+  const alreadyActive = ids.find(id => node[id] && node[id].active === true);
+  if (alreadyActive) {
+    // synchroniser metadata si manquante
+    const metaSnap = await baseRef.child('metadata').once('value');
+    const meta = metaSnap.val() || {};
+    if (meta.active_playlist_id !== alreadyActive) {
+      await baseRef.child('metadata').update({
+        active_playlist_id: alreadyActive,
+        activated_at: Date.now(),
+        last_updated: Date.now()
+      });
+    }
+    return;
+  }
+
+  // Sinon, choisir la plus ancienne comme active
+  const oldest = ids
+    .map(id => ({ id, t: node[id].created_at || '' }))
+    .sort((a,b)=> new Date(a.t) - new Date(b.t))[0].id;
+
+  await setActivePlaylist(mac, oldest);
 }
 
 async function loadPlaylists(mac, attemptMigrate=false){
@@ -165,14 +186,13 @@ async function loadPlaylists(mac, attemptMigrate=false){
   if (attemptMigrate){
     await migrateOldPlaylistsIfNeeded(mac);
   }
+  await ensureOneActiveIfMissing(mac);
 
   const baseRef = database.ref(`devices/${key}`);
   const snap = await baseRef.child('playlists').once('value');
-  const playlists = snap.val();
+  const playlists = snap.val() || {};
 
-  if (!playlists){ container.innerHTML += '<p>Aucune playlist</p>'; return; }
-
-  // afficher par ordre chronologique (created_at asc)
+  // Affichage trié (ancien → récent)
   const items = Object.values(playlists).map(p => ({
     id: p.id || '',
     name: p.name || '(sans nom)',
@@ -181,31 +201,24 @@ async function loadPlaylists(mac, attemptMigrate=false){
     active: !!p.active
   })).sort((a,b)=> new Date(a.created_at) - new Date(b.created_at));
 
+  if (items.length === 0) {
+    container.innerHTML += '<p>Aucune playlist</p>';
+    return;
+  }
+
   items.forEach(p=>{
     const el = document.createElement('div');
     el.className = 'playlist-item';
     el.innerHTML = `
       <h4>${p.name} ${p.active ? '<span style="color:#0a7">• active</span>' : ''}</h4>
       <p style="word-break:break-all">URL: ${p.url}</p>
-      <small>ID: <code>${p.id}</code> — Créée le: ${p.created_at ? new Date(p.created_at).toLocaleString() : '-'}</small>
+      <small>ID: <code>${p.id}</code> — Créée: ${p.created_at ? new Date(p.created_at).toLocaleString() : '-'}</small>
       <div class="playlist-actions">
         ${p.active ? '' : `<button onclick="setActivePlaylist('${mac}','${p.id}')">Définir active</button>`}
         <button class="secondary" onclick="deletePlaylist('${mac}','${p.id}')">Supprimer</button>
       </div>`;
     container.appendChild(el);
   });
-
-  // synchroniser metadata.active_playlist_id si manquant
-  const metaSnap = await baseRef.child('metadata').once('value');
-  const meta = metaSnap.val() || {};
-  const currentActive = items.find(p=>p.active);
-  if (currentActive && meta.active_playlist_id !== currentActive.id) {
-    await baseRef.child('metadata').update({
-      active_playlist_id: currentActive.id,
-      activated_at: Date.now(),
-      last_updated: Date.now()
-    });
-  }
 }
 
 async function deletePlaylist(mac, playlistId){
@@ -214,7 +227,6 @@ async function deletePlaylist(mac, playlistId){
   const base = database.ref(`devices/${key}`);
   const listRef = base.child('playlists');
 
-  // 1) récupérer toutes les playlists pour savoir si celle-ci est active
   const snap = await listRef.once('value');
   const node = snap.val() || {};
   const target = node[playlistId];
@@ -223,7 +235,6 @@ async function deletePlaylist(mac, playlistId){
   const wasActive = !!target.active;
   await listRef.child(playlistId).remove();
 
-  // 2) si on a supprimé l’active → promouvoir la plus ancienne restante
   const remainingSnap = await listRef.once('value');
   const remaining = remainingSnap.val() || {};
   const ids = Object.keys(remaining);
@@ -234,11 +245,9 @@ async function deletePlaylist(mac, playlistId){
       last_updated: Date.now()
     });
   } else if (wasActive) {
-    // trouve la plus ancienne (created_at asc)
-    const ordered = ids
-      .map(id => ({ id, created_at: remaining[id].created_at || '' }))
-      .sort((a,b)=> new Date(a.created_at) - new Date(b.created_at));
-    const nextId = ordered[0].id;
+    const nextId = ids
+      .map(id => ({ id, t: remaining[id].created_at || '' }))
+      .sort((a,b)=> new Date(a.t) - new Date(b.t))[0].id;
     await setActivePlaylist(mac, nextId);
   } else {
     await base.child('metadata/last_updated').set(Date.now());
