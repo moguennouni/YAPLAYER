@@ -13,7 +13,7 @@ const firebaseConfig = {
 const app = firebase.initializeApp(firebaseConfig);
 const database = firebase.database(app);
 
-/*** Dom Ready ***/
+/*** DOM Ready ***/
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-btn').addEventListener('click', handleLogin);
   document.getElementById('save-btn').addEventListener('click', handleSavePlaylist);
@@ -21,28 +21,41 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function togglePasswordVisibility() {
-  const el = document.getElementById('input-password');
-  el.type = (el.type === 'password') ? 'text' : 'password';
+  const passwordInput = document.getElementById('input-password');
+  passwordInput.type = (passwordInput.type === 'password') ? 'text' : 'password';
 }
 
 /*** Helpers ***/
 function macToKey(mac) {
   return mac.replace(/:/g, '_');
 }
+function isValidMac(mac) {
+  return /^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$/.test(mac);
+}
 
-function computeStatus(subscription, nowMs = Date.now()) {
-  if (!subscription || !subscription.plan) return 'TRIAL'; // défaut conservateur
-  const plan = subscription.plan;
+/** Abonnement : calcul statut + affichage **/
+function computeStatus(subscription, now = Date.now()) {
+  if (!subscription || !subscription.plan) return 'TRIAL';
+  const { plan, trial_end = 0, expires_at = 0 } = subscription;
+
   if (plan === 'LIFETIME') return 'LIFETIME';
+  if (plan === 'TRIAL')   return now <= Number(trial_end) ? 'TRIAL'  : 'EXPIRED';
+  if (plan === 'YEARLY')  return now <= Number(expires_at) ? 'YEARLY' : 'EXPIRED';
+  return 'EXPIRED';
+}
+
+function computeCalculatedPayload(plan) {
+  const now = Date.now();
   if (plan === 'TRIAL') {
-    const end = Number(subscription.trial_end || 0);
-    return nowMs <= end ? 'TRIAL' : 'EXPIRED';
+    const fifteenDays = 15 * 24 * 3600 * 1000;
+    return { plan, trial_end: now + fifteenDays, expires_at: 0, updated_at: now };
   }
   if (plan === 'YEARLY') {
-    const exp = Number(subscription.expires_at || 0);
-    return nowMs <= exp ? 'YEARLY' : 'EXPIRED';
+    const year365 = 365 * 24 * 3600 * 1000;
+    return { plan, trial_end: 0, expires_at: now + year365, updated_at: now };
   }
-  return 'EXPIRED';
+  // LIFETIME
+  return { plan, trial_end: 0, expires_at: 0, updated_at: now };
 }
 
 function renderSubscriptionUI(subscription) {
@@ -50,23 +63,18 @@ function renderSubscriptionUI(subscription) {
   document.getElementById('display-status').textContent = status;
 
   let expiryText = '—';
-  if (subscription?.plan === 'TRIAL' && subscription?.trial_end) {
+  if (subscription?.plan === 'TRIAL' && subscription.trial_end) {
     expiryText = new Date(Number(subscription.trial_end)).toLocaleString();
-  } else if (subscription?.plan === 'YEARLY' && subscription?.expires_at) {
+  } else if (subscription?.plan === 'YEARLY' && subscription.expires_at) {
     expiryText = new Date(Number(subscription.expires_at)).toLocaleString();
   } else if (subscription?.plan === 'LIFETIME') {
     expiryText = 'Jamais (LIFETIME)';
   }
   document.getElementById('display-expiry').textContent = expiryText;
 
-  // Préremplir le formulaire
-  const planSel = document.getElementById('sub-plan');
-  const trialEnd = document.getElementById('sub-trial-end');
-  const expiresAt = document.getElementById('sub-expires-at');
-
-  planSel.value = subscription?.plan || 'TRIAL';
-  trialEnd.value = subscription?.trial_end || '';
-  expiresAt.value = subscription?.expires_at || '';
+  // Sélecteur plan
+  const sel = document.getElementById('sub-plan');
+  sel.value = subscription?.plan || 'TRIAL';
 }
 
 /*** Auth ***/
@@ -74,8 +82,7 @@ async function handleLogin() {
   const mac = document.getElementById('input-mac').value.trim().toUpperCase();
   const password = document.getElementById('input-password').value.trim();
 
-  const macRegex = /^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$/;
-  if (!macRegex.test(mac)) {
+  if (!isValidMac(mac)) {
     alert('Format MAC invalide. Utilisez le format XX:XX:XX:XX:XX:XX');
     return;
   }
@@ -105,17 +112,13 @@ async function handleLogin() {
           created_at: Date.now(),
           last_updated: Date.now()
         },
-        subscription: {
-          plan: 'TRIAL',
-          trial_end: Date.now() + 10 * 24 * 3600 * 1000, // exemple: 10 jours
-          expires_at: 0,
-          updated_at: Date.now()
-        }
+        // Abonnement par défaut : TRIAL 15 jours
+        subscription: computeCalculatedPayload('TRIAL')
       });
       showPlaylistManager(mac);
     }
   } catch (e) {
-    console.error(e);
+    console.error("Erreur Firebase:", e);
     alert('Erreur de connexion au serveur');
   }
 }
@@ -123,8 +126,8 @@ async function handleLogin() {
 /*** Playlists ***/
 async function handleSavePlaylist() {
   const mac = document.getElementById('display-mac').textContent;
-  const name = (document.getElementById('playlist-name').value || '').trim();
-  const url  = (document.getElementById('playlist-url').value  || '').trim();
+  const name = document.getElementById('playlist-name').value.trim();
+  const url  = document.getElementById('playlist-url').value.trim();
 
   if (!name) return alert('Veuillez entrer un nom de playlist');
   if (!url)  return alert('Veuillez entrer une URL');
@@ -142,8 +145,8 @@ async function handleSavePlaylist() {
     document.getElementById('playlist-url').value = '';
     loadPlaylists(mac);
   } catch (e) {
-    console.error(e);
-    alert('Échec de l’enregistrement');
+    console.error("Erreur:", e);
+    alert(`Échec de l'enregistrement: ${e.message}`);
   }
 }
 
@@ -154,7 +157,7 @@ async function deletePlaylist(mac, playlistName) {
     await database.ref(`devices/${key}/playlists/${playlistName}`).remove();
     loadPlaylists(mac);
   } catch (e) {
-    console.error(e);
+    console.error("Erreur suppression:", e);
     alert('Erreur lors de la suppression');
   }
 }
@@ -198,7 +201,7 @@ async function loadPlaylists(mac) {
       container.innerHTML += '<p>Aucune playlist enregistrée</p>';
     }
   } catch (e) {
-    console.error(e);
+    console.error("Erreur chargement:", e);
     container.innerHTML += '<p>Erreur lors du chargement des playlists</p>';
   }
 }
@@ -217,26 +220,10 @@ async function loadSubscription(mac) {
 
 async function handleSaveSubscription() {
   const mac = document.getElementById('display-mac').textContent;
-  const key = macToKey(mac);
-
   const plan = document.getElementById('sub-plan').value;
-  const trialEnd = document.getElementById('sub-trial-end').value.trim();
-  const expiresAt = document.getElementById('sub-expires-at').value.trim();
+  const key  = macToKey(mac);
 
-  const payload = {
-    plan,
-    trial_end: plan === 'TRIAL' ? Number(trialEnd || 0) : 0,
-    expires_at: plan === 'YEARLY' ? Number(expiresAt || 0) : 0,
-    updated_at: Date.now()
-  };
-
-  // Petites validations côté client
-  if (plan === 'TRIAL' && payload.trial_end <= Date.now()) {
-    return alert("La fin d'essai doit être dans le futur");
-  }
-  if (plan === 'YEARLY' && payload.expires_at <= Date.now()) {
-    return alert("La date d'expiration YEARLY doit être dans le futur");
-  }
+  const payload = computeCalculatedPayload(plan);
 
   try {
     await database.ref(`devices/${key}/subscription`).set(payload);
