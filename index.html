@@ -1,28 +1,30 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>YAPLAYER - Authentification & Abonnement</title>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Auth -->
   <div class="auth-container" id="auth-container">
     <h1>Authentification</h1>
     <div class="form-group">
       <label for="input-mac">Adresse MAC :</label>
-      <input type="text" id="input-mac" placeholder="00:11:22:33:44:55"/>
+      <input type="text" id="input-mac" placeholder="00:11:22:33:44:55">
     </div>
     <div class="form-group">
       <label for="input-password">Mot de passe :</label>
       <div class="password-container">
-        <input type="password" id="input-password"/>
+        <input type="password" id="input-password">
         <span class="toggle-password" onclick="togglePasswordVisibility()">👁️</span>
       </div>
     </div>
     <button id="login-btn">Se connecter</button>
   </div>
 
+  <!-- Manager -->
   <div class="playlist-container" id="playlist-container" style="display:none;">
     <h1>Gestion de playlist & Abonnement</h1>
 
@@ -34,15 +36,16 @@
 
     <div class="existing-playlists" id="existing-playlists">
       <h3>Vos playlists</h3>
+      <!-- Liste dynamique -->
     </div>
 
     <div class="form-group">
       <label for="playlist-name">Nom de la playlist :</label>
-      <input type="text" id="playlist-name" placeholder="Ma playlist préférée"/>
+      <input type="text" id="playlist-name" placeholder="Ma playlist préférée">
     </div>
     <div class="form-group">
       <label for="playlist-url">URL Playlist M3U :</label>
-      <input type="url" id="playlist-url" placeholder="https://exemple.com/playlist.m3u"/>
+      <input type="url" id="playlist-url" placeholder="https://exemple.com/playlist.m3u">
     </div>
     <button id="save-btn">Enregistrer la playlist</button>
 
@@ -52,29 +55,21 @@
     <div class="form-group">
       <label for="sub-plan">Plan :</label>
       <select id="sub-plan">
-        <option value="TRIAL">TRIAL</option>
-        <option value="YEARLY">YEARLY</option>
+        <option value="TRIAL">TRIAL (15 jours)</option>
+        <option value="YEARLY">YEARLY (365 jours)</option>
         <option value="LIFETIME">LIFETIME</option>
       </select>
     </div>
 
-    <div class="form-group">
-      <label for="sub-trial-end">Fin d’essai (timestamp ms) :</label>
-      <input type="text" id="sub-trial-end" placeholder="Ex: 1759353599000"/>
-      <small>Utilisé seulement si plan = TRIAL</small>
-    </div>
-
-    <div class="form-group">
-      <label for="sub-expires-at">Expiration (timestamp ms) :</label>
-      <input type="text" id="sub-expires-at" placeholder="Ex: 1790889599000"/>
-      <small>Utilisé si plan = YEARLY (ignoré pour LIFETIME)</small>
-    </div>
-
+    <!-- Pas de saisie de date : calcul automatique -->
     <button id="save-subscription-btn">Enregistrer l’abonnement</button>
   </div>
 
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
+
+  <!-- App -->
   <script src="script.js"></script>
 </body>
 </html>
