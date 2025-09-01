@@ -26,31 +26,38 @@ const macToKey = mac => mac.replace(/:/g,'_');
 const isValidMac = mac => /^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$/.test(mac);
 const isPushKey  = k => /^-[-A-Za-z0-9_]{10,}$/.test(k||""); // push key Firebase
 
-function toEndOfDayISO(dateStr){
-  if (!dateStr) return null;
-  // dateStr au format "YYYY-MM-DD"
+// === Helpers dates en millisecondes ===
+function toEndOfDayMs(dateStr) {
+  if (!dateStr) return null; // "YYYY-MM-DD"
   const d = new Date(dateStr + 'T23:59:59');
   if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
+  return d.getTime(); // nombre
 }
-function addDaysISO(days){
+function addDaysMs(days) {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  d.setHours(23,59,59,0);
-  return d.toISOString();
+  d.setHours(23, 59, 59, 0);
+  return d.getTime(); // nombre
 }
-function addYearsISO(years){
+function addYearsMs(years) {
   const d = new Date();
   d.setFullYear(d.getFullYear() + years);
-  d.setHours(23,59,59,0);
-  return d.toISOString();
+  d.setHours(23, 59, 59, 0);
+  return d.getTime(); // nombre
 }
-function fmtDateHuman(iso){
-  if (!iso) return '—';
-  const d = new Date(iso);
+function fmtDateHumanFromMs(ms) {
+  if (!ms || Number.isNaN(Number(ms))) return '—';
+  const d = new Date(Number(ms));
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString();
 }
+function toInputDateFromMs(ms) {
+  if (!ms || Number.isNaN(Number(ms))) return '';
+  const d = new Date(Number(ms));
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
 
 /*** Auth ***/
 async function handleLogin(){
@@ -71,15 +78,16 @@ async function handleLogin(){
     // Création device + abonnement TRIAL par défaut (10 jours)
     const now = Date.now();
     const trialEnd = addDaysISO(10);
-    await ref.set({
-      mac, password, playlists: {},
-      metadata:{ created_at: now, last_updated: now, active_playlist_id: null },
-      subscription: {
-        plan: "TRIAL",
-        trial_end: trialEnd,
-        updated_at: now
-      }
-    });
+await ref.set({
+  mac, password, playlists: {},
+  metadata: { created_at: Date.now(), last_updated: Date.now(), active_playlist_id: null },
+  subscription: {
+    plan: "TRIAL",
+    trial_end: addDaysMs(10),   // nombre
+    updated_at: Date.now()      // nombre
+  }
+});
+
     showPlaylistManager(mac);
   }
 }
@@ -294,10 +302,12 @@ async function deletePlaylist(mac, playlistId){
 }
 
 /*** ===== Abonnement : UI & Firebase ===== ***/
-function initSubscriptionUI(){
-  const sel  = document.getElementById('sub-plan');
-  const tBox = document.getElementById('trial-fields');
-  const pBox = document.getElementById('paid-fields');
+function initSubscriptionUI() {
+  const sel     = document.getElementById('sub-plan');
+  const tBox    = document.getElementById('trial-fields');
+  const pBox    = document.getElementById('paid-fields');
+  const tInput  = document.getElementById('trial-end-date');
+  const eInput  = document.getElementById('expires-at-date');
   const lblPlan = document.getElementById('sub-plan-label');
   const lblEnd  = document.getElementById('sub-end-label');
 
@@ -305,74 +315,103 @@ function initSubscriptionUI(){
   const year1   = document.getElementById('btn-yearly-1y');
   const saveBtn = document.getElementById('sub-save-btn');
 
-  function updateVisibility(){
-    const val = sel.value || 'TRIAL';
-    tBox.style.display = (val === 'TRIAL')   ? 'block' : 'none';
-    pBox.style.display = (val === 'YEARLY')  ? 'block' : 'none';
-    if (val === 'LIFETIME'){
-      tBox.style.display = 'none';
-      pBox.style.display = 'none';
-    }
+  function updateVisibility() {
+    const val = (sel.value || 'TRIAL').toUpperCase();
+    tBox.style.display = (val === 'TRIAL')  ? 'block' : 'none';
+    pBox.style.display = (val === 'YEARLY') ? 'block' : 'none';
+    if (val === 'LIFETIME') { tBox.style.display = 'none'; pBox.style.display = 'none'; }
   }
 
-  sel.addEventListener('change', ()=>{
-    updateVisibility();
+  sel.addEventListener('change', () => {
     lblPlan.textContent = sel.value;
-    // Ne change pas la date automatiquement, l’opérateur décide via inputs/boutons
+    updateVisibility();
   });
 
-  trial10.addEventListener('click', (e)=>{
+  trial10.addEventListener('click', (e) => {
     e.preventDefault();
-    const iso = addDaysISO(10);
-    const d   = new Date(iso);
-    const day = d.toISOString().slice(0,10);
-    document.getElementById('trial-end-date').value = day;
-    lblEnd.textContent = fmtDateHuman(iso);
+    const ms = addDaysMs(10);
+    tInput.value = toInputDateFromMs(ms);
+    lblEnd.textContent = fmtDateHumanFromMs(ms);
   });
 
-  year1.addEventListener('click', (e)=>{
+  year1.addEventListener('click', (e) => {
     e.preventDefault();
-    const iso = addYearsISO(1);
-    const d   = new Date(iso);
-    const day = d.toISOString().slice(0,10);
-    document.getElementById('expires-at-date').value = day;
-    lblEnd.textContent = fmtDateHuman(iso);
+    const ms = addYearsMs(1);
+    eInput.value = toInputDateFromMs(ms);
+    lblEnd.textContent = fmtDateHumanFromMs(ms);
   });
 
-  saveBtn.addEventListener('click', async ()=>{
+  saveBtn.addEventListener('click', async () => {
     const mac = document.getElementById('display-mac').textContent;
     if (!isValidMac(mac)) return alert('MAC invalide (session).');
 
-    const plan = sel.value || 'TRIAL';
-    let payload = { plan, updated_at: Date.now() };
+    const plan = (sel.value || 'TRIAL').toUpperCase();
+    const payload = { plan, updated_at: Date.now() }; // nombres
 
-    if (plan === 'TRIAL'){
-      const d = document.getElementById('trial-end-date').value;
-      const iso = toEndOfDayISO(d) || addDaysISO(10);
-      payload.trial_end = iso;
-      delete payload.expires_at;
-    } else if (plan === 'YEARLY'){
-      const d = document.getElementById('expires-at-date').value;
-      const iso = toEndOfDayISO(d) || addYearsISO(1);
-      payload.expires_at = iso;
+    if (plan === 'TRIAL') {
+      const chosen = toEndOfDayMs(tInput.value) || addDaysMs(10);
+      payload.trial_end = chosen;        // nombre
+      // nettoie l’autre champ si présent
+      payload.expires_at = 0;            // tu as déjà 0 en base → passe validation
+    } else if (plan === 'YEARLY') {
+      const chosen = toEndOfDayMs(eInput.value) || addYearsMs(1);
+      payload.expires_at = chosen;       // nombre
+      // nettoie l’autre champ
       delete payload.trial_end;
-    } else if (plan === 'LIFETIME'){
-      // Pas d’échéance → nettoie les champs date
+    } else if (plan === 'LIFETIME') {
+      // pas d’échéance → supprime ou mets 0
       delete payload.trial_end;
-      delete payload.expires_at;
+      payload.expires_at = 0;
     }
 
-    await saveSubscription(mac, payload);
-    alert('Abonnement enregistré');
-    // rafraîchir l’affichage
-    document.getElementById('sub-plan-label').textContent = payload.plan;
-    document.getElementById('sub-end-label').textContent =
-      fmtDateHuman(payload.trial_end || payload.expires_at);
+    const ok = await saveSubscription(mac, payload);
+    if (ok) {
+      document.getElementById('sub-plan-label').textContent = payload.plan;
+      document.getElementById('sub-end-label').textContent =
+        fmtDateHumanFromMs(payload.trial_end || payload.expires_at || 0);
+      alert('Abonnement enregistré');
+    }
   });
 
-  // Init visibilité au 1er chargement
   updateVisibility();
 }
+
+async function loadSubscription(mac) {
+  const key = macToKey(mac);
+  const ref = database.ref(`devices/${key}/subscription`);
+  const snap = await ref.once('value');
+  const data = snap.val() || {};
+
+  const sel     = document.getElementById('sub-plan');
+  const tInput  = document.getElementById('trial-end-date');
+  const eInput  = document.getElementById('expires-at-date');
+  const lblPlan = document.getElementById('sub-plan-label');
+  const lblEnd  = document.getElementById('sub-end-label');
+
+  const plan = (data.plan || 'TRIAL').toUpperCase();
+  sel.value = plan;
+  lblPlan.textContent = plan;
+
+  if (plan === 'TRIAL') {
+    const ms = (typeof data.trial_end === 'number' ? data.trial_end : addDaysMs(10));
+    tInput.value = toInputDateFromMs(ms);
+    lblEnd.textContent = fmtDateHumanFromMs(ms);
+    document.getElementById('trial-fields').style.display = 'block';
+    document.getElementById('paid-fields').style.display  = 'none';
+  } else if (plan === 'YEARLY') {
+    const ms = (typeof data.expires_at === 'number' && data.expires_at > 0) ? data.expires_at : addYearsMs(1);
+    eInput.value = toInputDateFromMs(ms);
+    lblEnd.textContent = fmtDateHumanFromMs(ms);
+    document.getElementById('trial-fields').style.display = 'none';
+    document.getElementById('paid-fields').style.display  = 'block';
+  } else {
+    // LIFETIME
+    lblEnd.textContent = '—';
+    document.getElementById('trial-fields').style.display = 'none';
+    document.getElementById('paid-fields').style.display  = 'none';
+  }
+}
+
 
 async function loadSubscription(mac){
   const key = macToKey(mac);
@@ -423,8 +462,16 @@ async function loadSubscription(mac){
   }
 }
 
-async function saveSubscription(mac, payload){
+async function saveSubscription(mac, payload) {
   const key = macToKey(mac);
   const ref = database.ref(`devices/${key}/subscription`);
-  await ref.set(payload);
+  try {
+    await ref.set(payload);
+    return true;
+  } catch (e) {
+    console.error('[SUB] Echec saveSubscription:', e);
+    alert('Erreur enregistrement abonnement: ' + (e && e.message ? e.message : e));
+    return false;
+  }
 }
+
