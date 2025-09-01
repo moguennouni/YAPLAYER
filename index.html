@@ -27,10 +27,49 @@
   <!-- Manager -->
   <div class="playlist-container" id="playlist-container" style="display:none;">
     <h1>Gestion de playlists</h1>
+
     <div class="client-info">
       <p>MAC: <span id="display-mac"></span></p>
     </div>
 
+    <!-- ===== Abonnement ===== -->
+    <div class="subscription-card" id="subscription-card">
+      <h3>Abonnement</h3>
+
+      <div class="form-group">
+        <label for="sub-plan">Type d’abonnement</label>
+        <select id="sub-plan">
+          <option value="TRIAL">TRIAL</option>
+          <option value="YEARLY">YEARLY</option>
+          <option value="LIFETIME">LIFETIME</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group" id="trial-fields">
+          <label for="trial-end-date">Fin de période d’essai (TRIAL)</label>
+          <input type="date" id="trial-end-date">
+          <div class="hint">Astuce : bouton ci-dessous pour 10 jours.</div>
+          <button id="btn-trial-10d" class="secondary">+10 jours</button>
+        </div>
+
+        <div class="form-group" id="paid-fields">
+          <label for="expires-at-date">Date d’expiration (YEARLY)</label>
+          <input type="date" id="expires-at-date">
+          <div class="hint">Astuce : bouton ci-dessous pour 1 an.</div>
+          <button id="btn-yearly-1y" class="secondary">+1 an</button>
+        </div>
+      </div>
+
+      <div class="subscription-inline">
+        <div><strong>Plan actuel :</strong> <span id="sub-plan-label">—</span></div>
+        <div><strong>Échéance :</strong> <span id="sub-end-label">—</span></div>
+      </div>
+
+      <button id="sub-save-btn">Enregistrer l’abonnement</button>
+    </div>
+
+    <!-- ===== Playlists ===== -->
     <div class="existing-playlists" id="existing-playlists">
       <h3>Vos playlists</h3>
       <!-- cartes dynamiques -->
