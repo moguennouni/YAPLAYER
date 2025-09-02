@@ -462,6 +462,169 @@ async function loadSubscription(mac){
   }
 }
 
+/* ============================================================
+ * YAPlayer (page web externe) — Sync abonnement Xtream → Firebase
+ * À coller dans script.js (en bas du fichier, ou après tes helpers)
+ * ============================================================ */
+
+/* ---- Helpers généraux ---- */
+function _macToKey(mac){ return mac.replace(/:/g,'_'); }
+function _isNonEmpty(s){ return typeof s === 'string' && s.trim() !== ''; }
+function _now(){ return Date.now(); }
+
+/* ---- Parse d'une URL Xtream pour extraire {protocol,host,port,username,password} ----
+   Gère les formes:
+   - http(s)://host[:port]/get.php?username=U&password=P&type=m3u
+   - http(s)://host[:port]/player_api.php?username=U&password=P
+   - http(s)://host[:port]/?username=U&password=P&...
+*/
+function parseXtreamUrl(url){
+  if (!_isNonEmpty(url)) return null;
+  try{
+    const u = new URL(url);
+    const protocol = u.protocol.replace(':','') || 'http';
+    const host = u.hostname;
+    // Si pas de port dans l'URL → garder vide (côté TV tu forces un défaut)
+    const port = u.port || '';
+    const username = u.searchParams.get('username') || '';
+    const password = u.searchParams.get('password') || '';
+    if (!_isNonEmpty(host) || !_isNonEmpty(username) || !_isNonEmpty(password)) return null;
+    return { protocol, host, port, username, password };
+  }catch(_){ return null; }
+}
+
+/* ---- Construit l'URL player_api.php de base ---- */
+function buildPlayerApi(creds){
+  if (!creds) return '';
+  const port = _isNonEmpty(creds.port) ? (':' + creds.port) : '';
+  return `${creds.protocol || 'http'}://${creds.host}${port}/player_api.php?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`;
+}
+
+/* ---- Lit user_info (exp_date en secondes) ---- */
+async function fetchXtreamAccountInfo(apiBase){
+  try{
+    const res = await fetch(apiBase);
+    const data = await res.json();
+    const ui = (data && data.user_info) || {};
+    const expSec = ui.exp_date ? Number(ui.exp_date) : NaN; // souvent secondes UNIX
+    const expMs  = isNaN(expSec) ? NaN : expSec * 1000;
+    return { expMs };
+  }catch(_){
+    return { expMs: NaN };
+  }
+}
+
+/* ---- Récupère l'URL de la playlist active (RTDB) ---- */
+async function getActivePlaylistUrlFromDB(mac){
+  const key = _macToKey(mac);
+  const baseRef = database.ref(`devices/${key}`);
+  const snap = await baseRef.child('playlists').once('value');
+  const node = snap.val() || {};
+  let active = null;
+
+  // priorité au flag active === true
+  Object.keys(node).forEach(id => {
+    if (node[id] && node[id].active) active = node[id];
+  });
+  if (!active){
+    // fallback: la plus ancienne
+    const arr = Object.values(node).sort((a,b)=> new Date(a.created_at||0) - new Date(b.created_at||0));
+    if (arr.length) active = arr[0];
+  }
+  return active && active.url ? String(active.url) : null;
+}
+
+/* ---- Déduction du plan selon expMs ----
+   - expMs valide → YEARLY (car fourni par Xtream pour les comptes à durée)
+   - expMs manquant/0/NaN → LIFETIME (ou on laisse le plan existant si besoin)
+*/
+function inferPlanFromExpMs(expMs, existingPlan){
+  if (typeof expMs === 'number' && !Number.isNaN(expMs) && expMs > 0) return 'YEARLY';
+  // si on veut préserver un TRIAL actif côté web, décommente:
+  // if ((existingPlan||'').toUpperCase() === 'TRIAL') return 'TRIAL';
+  return 'LIFETIME';
+}
+
+/* ---- Écrit subscription dans Firebase (RTDB) ----
+   Respecte tes rules: nombres uniquement pour trial_end/expires_at/updated_at
+*/
+async function writeSubscription(mac, patch){
+  const key = _macToKey(mac);
+  const ref = database.ref(`devices/${key}/subscription`);
+  // lecture du plan existant pour ne pas écraser un TRIAL en cours si tu veux
+  const existing = (await ref.once('value')).val() || {};
+  const plan = patch.plan || existing.plan || 'TRIAL';
+
+  const toWrite = {
+    plan: plan,                                  // "TRIAL" | "YEARLY" | "LIFETIME"
+    trial_end: Number(existing.trial_end || 0),  // on ne le touche pas ici
+    expires_at: Number(patch.expires_at || 0),   // nombre (ms)
+    updated_at: _now()
+  };
+  await ref.set(toWrite);
+}
+
+/* ---- Sync principal: à appeler après login / setActivePlaylist ---- */
+async function syncSubscriptionFromXtream(mac){
+  try{
+    const url = await getActivePlaylistUrlFromDB(mac);
+    if (!url) return; // pas de playlist active → rien à faire
+
+    const creds = parseXtreamUrl(url);
+    if (!creds) return;
+
+    const apiBase = buildPlayerApi(creds);
+    const { expMs } = await fetchXtreamAccountInfo(apiBase);
+
+    // expMs valide => YEARLY ; sinon LIFETIME (ou garder TRIAL si tu préfères)
+    const snap = await database.ref(`devices/${_macToKey(mac)}/subscription`).once('value');
+    const existingPlan = (snap.val() && snap.val().plan) || 'TRIAL';
+    const plan = inferPlanFromExpMs(expMs, existingPlan);
+
+    await writeSubscription(mac, { plan, expires_at: (Number(expMs) || 0) });
+    console.log('[SubscriptionSync] OK:', { plan, expires_at: Number(expMs)||0 });
+  }catch(e){
+    console.warn('[SubscriptionSync] échec', e);
+  }
+}
+
+/* ============================================================
+ * INTÉGRATION AUX FLUX EXISTANTS
+ * ============================================================ */
+
+/* 1) Après création d’un device (login), tu avais:
+      - création TRIAL 10 jours
+   On garde tel quel, mais on enlève l’appel inexistant à addDaysISO.
+   → Appelle ensuite le sync pour surcharger avec l’info Xtream si dispo.
+*/
+async function _postLoginAfterCreate(mac){
+  try { await syncSubscriptionFromXtream(mac); } catch(_) {}
+}
+
+/* 2) Appeler après showPlaylistManager(mac) pour rafraîchir l’abonnement
+      (la playlist active peut avoir changé entre-temps) */
+async function _postShowPlaylist(mac){
+  try { await syncSubscriptionFromXtream(mac); } catch(_) {}
+}
+
+/* 3) Appeler après setActivePlaylist(mac, playlistId) */
+async function _postSetActivePlaylist(mac){
+  try { await syncSubscriptionFromXtream(mac); } catch(_) {}
+}
+
+/* ============================================================
+ * HOOKS (à placer là où tu as déjà ces appels)
+ *  - Après login: une fois showPlaylistManager(mac) appelé, enchaîne _postShowPlaylist(mac)
+ *  - Après setActivePlaylist: enchaîne _postSetActivePlaylist(mac)
+ * ============================================================ */
+// Exemple d’usage (si tes fonctions sont dans le même scope) :
+//   -> à la fin de showPlaylistManager(mac):
+//       _postShowPlaylist(mac);
+//   -> à la fin de setActivePlaylist(mac, playlistId):
+//       await setActivePlaylist(mac, playlistId);
+//       await _postSetActivePlaylist(mac);
+
+
 async function saveSubscription(mac, payload) {
   const key = macToKey(mac);
   const ref = database.ref(`devices/${key}/subscription`);
