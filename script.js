@@ -11,84 +11,114 @@ const firebaseConfig = {
 const app = firebase.initializeApp(firebaseConfig);
 const database = firebase.database(app);
 
-/*** UI ***/
+/*** UI boot ***/
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-btn').addEventListener('click', handleLogin);
   document.getElementById('save-btn').addEventListener('click', handleSavePlaylist);
-
-  // Subscription UI init
+  const refreshBtn = document.getElementById('refresh-exp-btn');
+  if (refreshBtn) refreshBtn.addEventListener('click', () => {
+    const mac = document.getElementById('display-mac').textContent;
+    if (!isValidMac(mac)) return alert('MAC invalide');
+    refreshAllPlaylistsExpiry(mac);
+  });
   initSubscriptionUI();
 });
-function togglePasswordVisibility(){const i=document.getElementById('input-password');i.type=(i.type==='password')?'text':'password';}
+function togglePasswordVisibility(){
+  const i=document.getElementById('input-password');
+  i.type=(i.type==='password')?'text':'password';
+}
 
-/*** Helpers ***/
+/*** Helpers généraux ***/
 const macToKey = mac => mac.replace(/:/g,'_');
 const isValidMac = mac => /^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$/.test(mac);
 const isPushKey  = k => /^-[-A-Za-z0-9_]{10,}$/.test(k||""); // push key Firebase
+const nowMs = () => Date.now();
 
-// === Helpers dates en millisecondes ===
-function toEndOfDayMs(dateStr) {
-  if (!dateStr) return null; // "YYYY-MM-DD"
+/*** Helpers dates (ms uniquement) ***/
+function toEndOfDayMs(dateStr) {           // "YYYY-MM-DD" -> ms
+  if (!dateStr) return null;
   const d = new Date(dateStr + 'T23:59:59');
-  if (Number.isNaN(d.getTime())) return null;
-  return d.getTime(); // nombre
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
 }
 function addDaysMs(days) {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  d.setHours(23, 59, 59, 0);
-  return d.getTime(); // nombre
+  d.setHours(23,59,59,0);
+  return d.getTime();
 }
 function addYearsMs(years) {
   const d = new Date();
   d.setFullYear(d.getFullYear() + years);
-  d.setHours(23, 59, 59, 0);
-  return d.getTime(); // nombre
+  d.setHours(23,59,59,0);
+  return d.getTime();
 }
 function fmtDateHumanFromMs(ms) {
-  if (!ms || Number.isNaN(Number(ms))) return '—';
-  const d = new Date(Number(ms));
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString();
+  const n = Number(ms);
+  if (!n || Number.isNaN(n)) return '—';
+  const d = new Date(n);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
 }
 function toInputDateFromMs(ms) {
-  if (!ms || Number.isNaN(Number(ms))) return '';
-  const d = new Date(Number(ms));
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  const n = Number(ms);
+  if (!n || Number.isNaN(n)) return '';
+  const d = new Date(n);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0,10);
 }
 
-/* === Sync expiration dans la PLAYLIST ACTIVE (RTDB) === */
-async function syncActivePlaylistExpiration(mac){
-  const key = mac.replace(/:/g,'_');
-  const baseRef = database.ref(`devices/${key}`);
+/*** Xtream helpers (exp_date -> ms) ***/
+function parseXtreamUrl(url){
+  if (!url || typeof url !== 'string') return null;
+  try{
+    const u = new URL(url);
+    const protocol = (u.protocol || 'http:').replace(':','');
+    const host = u.hostname;
+    const port = u.port || '';
+    const username = u.searchParams.get('username') || '';
+    const password = u.searchParams.get('password') || '';
+    if (!host || !username || !password) return null;
+    return { protocol, host, port, username, password };
+  }catch(_){ return null; }
+}
+function buildPlayerApi(creds){
+  if (!creds) return '';
+  const port = creds.port ? (':' + creds.port) : '';
+  return `${creds.protocol||'http'}://${creds.host}${port}/player_api.php?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`;
+}
+async function fetchExpMsFromXtream(apiBase){
+  try{
+    const r = await fetch(apiBase);
+    const j = await r.json();
+    const expSec = j && j.user_info ? Number(j.user_info.exp_date) : NaN;
+    return Number.isNaN(expSec) ? 0 : expSec * 1000;
+  }catch(_){ return 0; }
+}
 
-  // 1) Récupérer l'ID de la playlist active + son URL
-  const metaSnap = await baseRef.child('metadata').once('value');
-  const meta = metaSnap.val() || {};
-  const activeId = meta.active_playlist_id;
+/*** Écriture de l’expiration par playlist ***/
+async function writePlaylistExpiry(mac, playlistId){
+  const key = macToKey(mac);
+  const base = database.ref(`devices/${key}`);
+  const snap = await base.child(`playlists/${playlistId}`).once('value');
+  const pl = snap.val() || {};
+  if (!pl.url) return;
 
-  const listSnap = await baseRef.child('playlists').once('value');
-  const playlists = listSnap.val() || {};
-
-  const active = activeId && playlists[activeId] ? playlists[activeId] : null;
-  if (!active || !active.url) return; // rien à faire
-
-  // 2) Appeler Xtream pour récupérer exp_date (en secondes)
-  const creds = parseXtreamUrl(active.url);
+  const creds = parseXtreamUrl(pl.url);
   if (!creds) return;
 
-  const apiBase = buildPlayerApi(creds); // .../player_api.php?username=...&password=...
-  const { expMs } = await fetchXtreamAccountInfo(apiBase); // expMs = exp_date * 1000 (ou NaN)
-  const expiresAtMs = (typeof expMs === 'number' && !Number.isNaN(expMs) && expMs > 0) ? expMs : 0;
+  const api = buildPlayerApi(creds);
+  const expMs = await fetchExpMsFromXtream(api);
 
-  // 3) Écrire dans la playlist elle-même
-  const updates = {};
-  updates[`playlists/${activeId}/expires_at`] = Number(expiresAtMs);
-  updates[`metadata/last_updated`] = Date.now();
-  await baseRef.update(updates);
-
-  console.log('[PlaylistExpiration] OK:', { activeId, expires_at: Number(expiresAtMs) });
+  await base.child(`playlists/${playlistId}/expires_at`).set(Number(expMs) || 0);
+  await base.child('metadata/last_updated').set(nowMs());
+  console.log('[PlaylistExpiry] écrit', playlistId, '=>', Number(expMs)||0);
+}
+async function refreshAllPlaylistsExpiry(mac){
+  const key = macToKey(mac);
+  const listSnap = await database.ref(`devices/${key}/playlists`).once('value');
+  const node = listSnap.val() || {};
+  for (const id of Object.keys(node)) {
+    await writePlaylistExpiry(mac, id);
+  }
+  alert('Expiration mise à jour sur toutes les playlists.');
 }
 
 /*** Auth ***/
@@ -106,41 +136,27 @@ async function handleLogin(){
     const data = snap.val();
     if (data.password !== password) return alert('Mot de passe incorrect');
     showPlaylistManager(mac);
-    _postLoginAfterCreate(mac);
   } else {
     // Création device + abonnement TRIAL par défaut (10 jours)
-    const now = Date.now();
-    const trialEnd = addDaysISO(10);
-await ref.set({
-  mac, password, playlists: {},
-  metadata: { created_at: Date.now(), last_updated: Date.now(), active_playlist_id: null },
-  subscription: {
-    plan: "TRIAL",
-    trial_end: addDaysMs(10),   // nombre
-    updated_at: Date.now()      // nombre
-  }
-});
-
+    await ref.set({
+      mac, password, playlists: {},
+      metadata: { created_at: nowMs(), last_updated: nowMs(), active_playlist_id: null },
+      subscription: { plan: "TRIAL", trial_end: addDaysMs(10), updated_at: nowMs() }
+    });
     showPlaylistManager(mac);
-    await syncActivePlaylistExpiration(mac);
   }
 }
 
+/*** Manager Playlists ***/
 function showPlaylistManager(mac){
   document.getElementById('display-mac').textContent = mac;
   document.getElementById('auth-container').style.display = 'none';
   document.getElementById('playlist-container').style.display = 'block';
 
-  // Charger abonnement + playlists
   loadSubscription(mac);
   loadPlaylists(mac, /*attemptMigrate=*/true);
-  _postShowPlaylist(mac);
-  syncActivePlaylistExpiration(mac);
 }
-  
-/*** Règles “active” ***/
-// 1ère playlist créée => active
-// Supprimer l’active => la plus ancienne devient active
+
 async function setActivePlaylist(mac, playlistId) {
   const key = macToKey(mac);
   const baseRef = database.ref(`devices/${key}`);
@@ -154,14 +170,16 @@ async function setActivePlaylist(mac, playlistId) {
   Object.keys(node).forEach(pid => {
     updates[`playlists/${pid}/active`] = (pid === playlistId);
   });
-  const now = Date.now();
+  const t = nowMs();
   updates[`metadata/active_playlist_id`] = playlistId;
-  updates[`metadata/activated_at`] = now;
-  updates[`metadata/last_updated`] = now;
+  updates[`metadata/activated_at`] = t;
+  updates[`metadata/last_updated`] = t;
 
   await baseRef.update(updates);
-  await _postSetActivePlaylist(mac);
-  await syncActivePlaylistExpiration(mac);
+
+  // ⚠️ MAJ de l’expiration pour la playlist qui devient active
+  await writePlaylistExpiry(mac, playlistId);
+
   await loadPlaylists(mac);
 }
 
@@ -180,19 +198,17 @@ async function handleSavePlaylist(){
   const already = allSnap.val() || {};
   const hasActive = Object.values(already).some(p => p && p.active === true);
 
-  const newRef  = listRef.push(); // => ID unique
-  const payload = {
-    id: newRef.key,
-    name, url,
-    created_at: new Date().toISOString(),
-    active: false
-  };
+  const newRef  = listRef.push(); // clé unique
+  const payload = { id: newRef.key, name, url, created_at: new Date().toISOString(), active: false };
   await newRef.set(payload);
 
   if (!hasActive) {
-    await setActivePlaylist(mac, newRef.key); // 1ère => active
+    // 1ère playlist → active + MAJ expiration
+    await setActivePlaylist(mac, newRef.key);
   } else {
-    await baseRef.child('metadata/last_updated').set(Date.now());
+    await baseRef.child('metadata/last_updated').set(nowMs());
+    // MAJ expiration tout de suite pour la playlist ajoutée
+    await writePlaylistExpiry(mac, newRef.key);
   }
 
   document.getElementById('playlist-name').value = '';
@@ -223,10 +239,14 @@ async function migrateOldPlaylistsIfNeeded(mac){
     };
     await newRef.set(payload);
     await listRef.child(oldKey).remove();
+
+    // MAJ expiration pour la playlist migrée
+    await writePlaylistExpiry(mac, newRef.key);
+
     migrated++;
   }
   if (migrated > 0){
-    await database.ref(`devices/${key}/metadata/last_updated`).set(Date.now());
+    await database.ref(`devices/${key}/metadata/last_updated`).set(nowMs());
     console.log(`✅ Migration: ${migrated} item(s) converti(s) en clés ID.`);
   }
   return migrated > 0;
@@ -247,8 +267,8 @@ async function ensureOneActiveIfMissing(mac){
     if (meta.active_playlist_id !== alreadyActive) {
       await baseRef.child('metadata').update({
         active_playlist_id: alreadyActive,
-        activated_at: Date.now(),
-        last_updated: Date.now()
+        activated_at: nowMs(),
+        last_updated: nowMs()
       });
     }
     return;
@@ -324,7 +344,7 @@ async function deletePlaylist(mac, playlistId){
   if (ids.length === 0) {
     await base.child('metadata').update({
       active_playlist_id: null,
-      last_updated: Date.now()
+      last_updated: nowMs()
     });
   } else if (wasActive) {
     const nextId = ids
@@ -332,14 +352,14 @@ async function deletePlaylist(mac, playlistId){
       .sort((a,b)=> new Date(a.t) - new Date(b.t))[0].id;
     await setActivePlaylist(mac, nextId);
   } else {
-    await base.child('metadata/last_updated').set(Date.now());
+    await base.child('metadata/last_updated').set(nowMs());
   }
 
   await loadPlaylists(mac);
   alert('Playlist supprimée');
 }
 
-/*** ===== Abonnement : UI & Firebase ===== ***/
+/*** Abonnement : UI & Firebase (bloc minimal, en ms) ***/
 function initSubscriptionUI() {
   const sel     = document.getElementById('sub-plan');
   const tBox    = document.getElementById('trial-fields');
@@ -384,20 +404,17 @@ function initSubscriptionUI() {
     if (!isValidMac(mac)) return alert('MAC invalide (session).');
 
     const plan = (sel.value || 'TRIAL').toUpperCase();
-    const payload = { plan, updated_at: Date.now() }; // nombres
+    const payload = { plan, updated_at: nowMs() };
 
     if (plan === 'TRIAL') {
       const chosen = toEndOfDayMs(tInput.value) || addDaysMs(10);
-      payload.trial_end = chosen;        // nombre
-      // nettoie l’autre champ si présent
-      payload.expires_at = 0;            // tu as déjà 0 en base → passe validation
+      payload.trial_end = chosen;
+      payload.expires_at = 0;
     } else if (plan === 'YEARLY') {
       const chosen = toEndOfDayMs(eInput.value) || addYearsMs(1);
-      payload.expires_at = chosen;       // nombre
-      // nettoie l’autre champ
+      payload.expires_at = chosen;
       delete payload.trial_end;
     } else if (plan === 'LIFETIME') {
-      // pas d’échéance → supprime ou mets 0
       delete payload.trial_end;
       payload.expires_at = 0;
     }
@@ -412,6 +429,19 @@ function initSubscriptionUI() {
   });
 
   updateVisibility();
+}
+
+async function saveSubscription(mac, payload){
+  try{
+    const key = macToKey(mac);
+    await database.ref(`devices/${key}/subscription`).set(payload);
+    await database.ref(`devices/${key}/metadata/last_updated`).set(nowMs());
+    return true;
+  }catch(e){
+    console.warn('[saveSubscription] fail', e);
+    alert('Erreur sauvegarde abonnement');
+    return false;
+  }
 }
 
 async function loadSubscription(mac) {
@@ -443,353 +473,8 @@ async function loadSubscription(mac) {
     document.getElementById('trial-fields').style.display = 'none';
     document.getElementById('paid-fields').style.display  = 'block';
   } else {
-    // LIFETIME
     lblEnd.textContent = '—';
     document.getElementById('trial-fields').style.display = 'none';
     document.getElementById('paid-fields').style.display  = 'none';
   }
 }
-
-
-async function loadSubscription(mac){
-  const key = macToKey(mac);
-  const ref = database.ref(`devices/${key}/subscription`);
-  const snap = await ref.once('value');
-  const data = snap.val();
-
-  const sel  = document.getElementById('sub-plan');
-  const tInp = document.getElementById('trial-end-date');
-  const eInp = document.getElementById('expires-at-date');
-  const lblPlan = document.getElementById('sub-plan-label');
-  const lblEnd  = document.getElementById('sub-end-label');
-
-  if (!data){
-    // Valeurs par défaut si pas encore configuré
-    sel.value = 'TRIAL';
-    const iso = addDaysISO(10);
-    tInp.value = new Date(iso).toISOString().slice(0,10);
-    lblPlan.textContent = 'TRIAL';
-    lblEnd.textContent  = fmtDateHuman(iso);
-    // UI visibilité
-    document.getElementById('trial-fields').style.display = 'block';
-    document.getElementById('paid-fields').style.display  = 'none';
-    return;
-  }
-
-  const plan = (data.plan || 'TRIAL').toUpperCase();
-  sel.value = plan;
-  lblPlan.textContent = plan;
-
-  if (plan === 'TRIAL'){
-    const iso = data.trial_end || addDaysISO(10);
-    tInp.value = new Date(iso).toISOString().slice(0,10);
-    lblEnd.textContent = fmtDateHuman(iso);
-    document.getElementById('trial-fields').style.display = 'block';
-    document.getElementById('paid-fields').style.display  = 'none';
-  } else if (plan === 'YEARLY'){
-    const iso = data.expires_at || addYearsISO(1);
-    eInp.value = new Date(iso).toISOString().slice(0,10);
-    lblEnd.textContent = fmtDateHuman(iso);
-    document.getElementById('trial-fields').style.display = 'none';
-    document.getElementById('paid-fields').style.display  = 'block';
-  } else {
-    // LIFETIME
-    lblEnd.textContent = '—';
-    document.getElementById('trial-fields').style.display = 'none';
-    document.getElementById('paid-fields').style.display  = 'none';
-  }
-}
-
-/* ============================================================
- * YAPlayer (page web externe) — Sync abonnement Xtream → Firebase
- * À coller dans script.js (en bas du fichier, ou après tes helpers)
- * ============================================================ */
-
-/* ---- Helpers généraux ---- */
-function _macToKey(mac){ return mac.replace(/:/g,'_'); }
-function _isNonEmpty(s){ return typeof s === 'string' && s.trim() !== ''; }
-function _now(){ return Date.now(); }
-
-/* ---- Parse d'une URL Xtream pour extraire {protocol,host,port,username,password} ----
-   Gère les formes:
-   - http(s)://host[:port]/get.php?username=U&password=P&type=m3u
-   - http(s)://host[:port]/player_api.php?username=U&password=P
-   - http(s)://host[:port]/?username=U&password=P&...
-*/
-function parseXtreamUrl(url){
-  if (!_isNonEmpty(url)) return null;
-  try{
-    const u = new URL(url);
-    const protocol = u.protocol.replace(':','') || 'http';
-    const host = u.hostname;
-    // Si pas de port dans l'URL → garder vide (côté TV tu forces un défaut)
-    const port = u.port || '';
-    const username = u.searchParams.get('username') || '';
-    const password = u.searchParams.get('password') || '';
-    if (!_isNonEmpty(host) || !_isNonEmpty(username) || !_isNonEmpty(password)) return null;
-    return { protocol, host, port, username, password };
-  }catch(_){ return null; }
-}
-
-/* ---- Construit l'URL player_api.php de base ---- */
-function buildPlayerApi(creds){
-  if (!creds) return '';
-  const port = _isNonEmpty(creds.port) ? (':' + creds.port) : '';
-  return `${creds.protocol || 'http'}://${creds.host}${port}/player_api.php?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`;
-}
-
-/* ---- Lit user_info (exp_date en secondes) ---- */
-async function fetchXtreamAccountInfo(apiBase){
-  try{
-    const res = await fetch(apiBase);
-    const data = await res.json();
-    const ui = (data && data.user_info) || {};
-    const expSec = ui.exp_date ? Number(ui.exp_date) : NaN; // souvent secondes UNIX
-    const expMs  = isNaN(expSec) ? NaN : expSec * 1000;
-    return { expMs };
-  }catch(_){
-    return { expMs: NaN };
-  }
-}
-
-/* ---- Récupère l'URL de la playlist active (RTDB) ---- */
-async function getActivePlaylistUrlFromDB(mac){
-  const key = _macToKey(mac);
-  const baseRef = database.ref(`devices/${key}`);
-  const snap = await baseRef.child('playlists').once('value');
-  const node = snap.val() || {};
-  let active = null;
-
-  // priorité au flag active === true
-  Object.keys(node).forEach(id => {
-    if (node[id] && node[id].active) active = node[id];
-  });
-  if (!active){
-    // fallback: la plus ancienne
-    const arr = Object.values(node).sort((a,b)=> new Date(a.created_at||0) - new Date(b.created_at||0));
-    if (arr.length) active = arr[0];
-  }
-  return active && active.url ? String(active.url) : null;
-}
-
-/* ---- Déduction du plan selon expMs ----
-   - expMs valide → YEARLY (car fourni par Xtream pour les comptes à durée)
-   - expMs manquant/0/NaN → LIFETIME (ou on laisse le plan existant si besoin)
-*/
-function inferPlanFromExpMs(expMs, existingPlan){
-  if (typeof expMs === 'number' && !Number.isNaN(expMs) && expMs > 0) return 'YEARLY';
-  // si on veut préserver un TRIAL actif côté web, décommente:
-  // if ((existingPlan||'').toUpperCase() === 'TRIAL') return 'TRIAL';
-  return 'LIFETIME';
-}
-
-/* ---- Écrit subscription dans Firebase (RTDB) ----
-   Respecte tes rules: nombres uniquement pour trial_end/expires_at/updated_at
-*/
-async function writeSubscription(mac, patch){
-  const key = _macToKey(mac);
-  const ref = database.ref(`devices/${key}/subscription`);
-  // lecture du plan existant pour ne pas écraser un TRIAL en cours si tu veux
-  const existing = (await ref.once('value')).val() || {};
-  const plan = patch.plan || existing.plan || 'TRIAL';
-
-  const toWrite = {
-    plan: plan,                                  // "TRIAL" | "YEARLY" | "LIFETIME"
-    trial_end: Number(existing.trial_end || 0),  // on ne le touche pas ici
-    expires_at: Number(patch.expires_at || 0),   // nombre (ms)
-    updated_at: _now()
-  };
-  await ref.set(toWrite);
-}
-
-/* ---- Sync principal: à appeler après login / setActivePlaylist ---- */
-async function syncSubscriptionFromXtream(mac){
-  try{
-    const url = await getActivePlaylistUrlFromDB(mac);
-    if (!url) return; // pas de playlist active → rien à faire
-
-    const creds = parseXtreamUrl(url);
-    if (!creds) return;
-
-    const apiBase = buildPlayerApi(creds);
-    const { expMs } = await fetchXtreamAccountInfo(apiBase);
-
-    // expMs valide => YEARLY ; sinon LIFETIME (ou garder TRIAL si tu préfères)
-    const snap = await database.ref(`devices/${_macToKey(mac)}/subscription`).once('value');
-    const existingPlan = (snap.val() && snap.val().plan) || 'TRIAL';
-    const plan = inferPlanFromExpMs(expMs, existingPlan);
-
-    await writeSubscription(mac, { plan, expires_at: (Number(expMs) || 0) });
-    console.log('[SubscriptionSync] OK:', { plan, expires_at: Number(expMs)||0 });
-  }catch(e){
-    console.warn('[SubscriptionSync] échec', e);
-  }
-}
-
-/* ============================================================
- * INTÉGRATION AUX FLUX EXISTANTS
- * ============================================================ */
-
-/* 1) Après création d’un device (login), tu avais:
-      - création TRIAL 10 jours
-   On garde tel quel, mais on enlève l’appel inexistant à addDaysISO.
-   → Appelle ensuite le sync pour surcharger avec l’info Xtream si dispo.
-*/
-async function _postLoginAfterCreate(mac){
-  try { await syncSubscriptionFromXtream(mac); } catch(_) {}
-}
-
-/* 2) Appeler après showPlaylistManager(mac) pour rafraîchir l’abonnement
-      (la playlist active peut avoir changé entre-temps) */
-async function _postShowPlaylist(mac){
-  try { await syncSubscriptionFromXtream(mac); } catch(_) {}
-}
-
-/* 3) Appeler après setActivePlaylist(mac, playlistId) */
-async function _postSetActivePlaylist(mac){
-  try { await syncSubscriptionFromXtream(mac); } catch(_) {}
-}
-
-/* ============================================================
- * HOOKS (à placer là où tu as déjà ces appels)
- *  - Après login: une fois showPlaylistManager(mac) appelé, enchaîne _postShowPlaylist(mac)
- *  - Après setActivePlaylist: enchaîne _postSetActivePlaylist(mac)
- * ============================================================ */
-// Exemple d’usage (si tes fonctions sont dans le même scope) :
-//   -> à la fin de showPlaylistManager(mac):
-//       _postShowPlaylist(mac);
-//   -> à la fin de setActivePlaylist(mac, playlistId):
-//       await setActivePlaylist(mac, playlistId);
-//       await _postSetActivePlaylist(mac);
-
-
-async function saveSubscription(mac, payload) {
-  const key = macToKey(mac);
-  const ref = database.ref(`devices/${key}/subscription`);
-  try {
-    await ref.set(payload);
-    return true;
-  } catch (e) {
-    console.error('[SUB] Echec saveSubscription:', e);
-    alert('Erreur enregistrement abonnement: ' + (e && e.message ? e.message : e));
-    return false;
-  }
-}
-
-/* =======================
- *  EXPIRATION PAR PLAYLIST (page web)
- *  Écrit devices/{macKey}/playlists/{playlistId}/expires_at (ms)
- * ======================= */
-
-// Reprend les helpers déjà définis dans script.js :
-function _isNonEmpty(s){ return typeof s === 'string' && s.trim() !== ''; }
-function _macToKey(mac){ return mac.replace(/:/g,'_'); }
-
-function parseXtreamUrl(url){
-  if (!_isNonEmpty(url)) return null;
-  try{
-    const u = new URL(url);
-    const protocol = u.protocol.replace(':','') || 'http';
-    const host = u.hostname;
-    const port = u.port || '';
-    const username = u.searchParams.get('username') || '';
-    const password = u.searchParams.get('password') || '';
-    if (!_isNonEmpty(host) || !_isNonEmpty(username) || !_isNonEmpty(password)) return null;
-    return { protocol, host, port, username, password };
-  }catch(_){ return null; }
-}
-
-function buildPlayerApi(creds){
-  if (!creds) return '';
-  const port = creds.port ? (':' + creds.port) : '';
-  return `${creds.protocol || 'http'}://${creds.host}${port}/player_api.php?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`;
-}
-
-async function fetchExpMsFromXtream(apiBase){
-  try{
-    const r = await fetch(apiBase);
-    const j = await r.json();
-    const ui = (j && j.user_info) || {};
-    const expSec = ui.exp_date ? Number(ui.exp_date) : NaN;
-    return (isNaN(expSec) ? 0 : expSec * 1000);
-  }catch(_){ return 0; }
-}
-
-async function updatePlaylistExpiry(mac, playlistId){
-  const key = _macToKey(mac);
-  const base = database.ref(`devices/${key}`);
-
-  const snap = await base.child(`playlists/${playlistId}`).once('value');
-  const pl = snap.val();
-  if (!pl || !pl.url) return;
-
-  const creds = parseXtreamUrl(pl.url);
-  if (!creds) return;
-
-  const api = buildPlayerApi(creds);
-  const expMs = await fetchExpMsFromXtream(api);
-
-  await base.child(`playlists/${playlistId}/expires_at`).set(Number(expMs) || 0);
-  await base.child('metadata/last_updated').set(Date.now());
-  console.log('[PlaylistExpiry] écrit', playlistId, '=>', Number(expMs)||0);
-}
-
-async function refreshAllPlaylistsExpiry(mac){
-  const key = _macToKey(mac);
-  const listSnap = await database.ref(`devices/${key}/playlists`).once('value');
-  const node = listSnap.val() || {};
-  const ids = Object.keys(node);
-  for (const id of ids){
-    await updatePlaylistExpiry(mac, id);
-  }
-  alert('Expiration mise à jour sur toutes les playlists.');
-}
-
-/* === Hooks : appelle la MAJ là où ça a du sens === */
-// 1) après ajout d’une playlist
-async function handleSavePlaylist(){
-  const mac = document.getElementById('display-mac').textContent;
-  const name = document.getElementById('playlist-name').value.trim();
-  const url  = document.getElementById('playlist-url').value.trim();
-  if (!name) return alert('Nom requis');
-  if (!url)  return alert('URL requise');
-
-  const key = _macToKey(mac);
-  const listRef = database.ref(`devices/${key}/playlists`);
-  const newRef  = listRef.push();
-
-  const payload = {
-    id: newRef.key, name, url,
-    created_at: new Date().toISOString(),
-    active: false
-  };
-  await newRef.set(payload);
-
-  // MAJ de l’expiration pour cette playlist
-  await updatePlaylistExpiry(mac, newRef.key);
-
-  // logique existante : gérer "active" + UI
-  const allSnap = await listRef.once('value');
-  const already = allSnap.val() || {};
-  const hasActive = Object.values(already).some(p => p && p.active === true);
-  if (!hasActive) {
-    await setActivePlaylist(mac, newRef.key);
-  } else {
-    await database.ref(`devices/${key}/metadata/last_updated`).set(Date.now());
-  }
-
-  document.getElementById('playlist-name').value = '';
-  document.getElementById('playlist-url').value = '';
-  alert('Playlist enregistrée');
-}
-
-// 2) quand on définit une playlist active
-async function setActivePlaylist(mac, playlistId){
-  // … (ta logique existante de setActivePlaylist) …
-  // À la fin :
-  await updatePlaylistExpiry(mac, playlistId);
-}
-
-// 3) expose un bouton “Rafraîchir l’expiration des playlists”
-window.refreshAllPlaylistsExpiry = refreshAllPlaylistsExpiry;
-
