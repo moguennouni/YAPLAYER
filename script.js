@@ -676,3 +676,120 @@ async function saveSubscription(mac, payload) {
   }
 }
 
+/* =======================
+ *  EXPIRATION PAR PLAYLIST (page web)
+ *  Écrit devices/{macKey}/playlists/{playlistId}/expires_at (ms)
+ * ======================= */
+
+// Reprend les helpers déjà définis dans script.js :
+function _isNonEmpty(s){ return typeof s === 'string' && s.trim() !== ''; }
+function _macToKey(mac){ return mac.replace(/:/g,'_'); }
+
+function parseXtreamUrl(url){
+  if (!_isNonEmpty(url)) return null;
+  try{
+    const u = new URL(url);
+    const protocol = u.protocol.replace(':','') || 'http';
+    const host = u.hostname;
+    const port = u.port || '';
+    const username = u.searchParams.get('username') || '';
+    const password = u.searchParams.get('password') || '';
+    if (!_isNonEmpty(host) || !_isNonEmpty(username) || !_isNonEmpty(password)) return null;
+    return { protocol, host, port, username, password };
+  }catch(_){ return null; }
+}
+
+function buildPlayerApi(creds){
+  if (!creds) return '';
+  const port = creds.port ? (':' + creds.port) : '';
+  return `${creds.protocol || 'http'}://${creds.host}${port}/player_api.php?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`;
+}
+
+async function fetchExpMsFromXtream(apiBase){
+  try{
+    const r = await fetch(apiBase);
+    const j = await r.json();
+    const ui = (j && j.user_info) || {};
+    const expSec = ui.exp_date ? Number(ui.exp_date) : NaN;
+    return (isNaN(expSec) ? 0 : expSec * 1000);
+  }catch(_){ return 0; }
+}
+
+async function updatePlaylistExpiry(mac, playlistId){
+  const key = _macToKey(mac);
+  const base = database.ref(`devices/${key}`);
+
+  const snap = await base.child(`playlists/${playlistId}`).once('value');
+  const pl = snap.val();
+  if (!pl || !pl.url) return;
+
+  const creds = parseXtreamUrl(pl.url);
+  if (!creds) return;
+
+  const api = buildPlayerApi(creds);
+  const expMs = await fetchExpMsFromXtream(api);
+
+  await base.child(`playlists/${playlistId}/expires_at`).set(Number(expMs) || 0);
+  await base.child('metadata/last_updated').set(Date.now());
+  console.log('[PlaylistExpiry] écrit', playlistId, '=>', Number(expMs)||0);
+}
+
+async function refreshAllPlaylistsExpiry(mac){
+  const key = _macToKey(mac);
+  const listSnap = await database.ref(`devices/${key}/playlists`).once('value');
+  const node = listSnap.val() || {};
+  const ids = Object.keys(node);
+  for (const id of ids){
+    await updatePlaylistExpiry(mac, id);
+  }
+  alert('Expiration mise à jour sur toutes les playlists.');
+}
+
+/* === Hooks : appelle la MAJ là où ça a du sens === */
+// 1) après ajout d’une playlist
+async function handleSavePlaylist(){
+  const mac = document.getElementById('display-mac').textContent;
+  const name = document.getElementById('playlist-name').value.trim();
+  const url  = document.getElementById('playlist-url').value.trim();
+  if (!name) return alert('Nom requis');
+  if (!url)  return alert('URL requise');
+
+  const key = _macToKey(mac);
+  const listRef = database.ref(`devices/${key}/playlists`);
+  const newRef  = listRef.push();
+
+  const payload = {
+    id: newRef.key, name, url,
+    created_at: new Date().toISOString(),
+    active: false
+  };
+  await newRef.set(payload);
+
+  // MAJ de l’expiration pour cette playlist
+  await updatePlaylistExpiry(mac, newRef.key);
+
+  // logique existante : gérer "active" + UI
+  const allSnap = await listRef.once('value');
+  const already = allSnap.val() || {};
+  const hasActive = Object.values(already).some(p => p && p.active === true);
+  if (!hasActive) {
+    await setActivePlaylist(mac, newRef.key);
+  } else {
+    await database.ref(`devices/${key}/metadata/last_updated`).set(Date.now());
+  }
+
+  document.getElementById('playlist-name').value = '';
+  document.getElementById('playlist-url').value = '';
+  alert('Playlist enregistrée');
+}
+
+// 2) quand on définit une playlist active
+async function setActivePlaylist(mac, playlistId){
+  // … (ta logique existante de setActivePlaylist) …
+  // À la fin :
+  await updatePlaylistExpiry(mac, playlistId);
+}
+
+// 3) expose un bouton “Rafraîchir l’expiration des playlists”
+window.refreshAllPlaylistsExpiry = refreshAllPlaylistsExpiry;
+
