@@ -58,6 +58,38 @@ function toInputDateFromMs(ms) {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+/* === Sync expiration dans la PLAYLIST ACTIVE (RTDB) === */
+async function syncActivePlaylistExpiration(mac){
+  const key = mac.replace(/:/g,'_');
+  const baseRef = database.ref(`devices/${key}`);
+
+  // 1) Récupérer l'ID de la playlist active + son URL
+  const metaSnap = await baseRef.child('metadata').once('value');
+  const meta = metaSnap.val() || {};
+  const activeId = meta.active_playlist_id;
+
+  const listSnap = await baseRef.child('playlists').once('value');
+  const playlists = listSnap.val() || {};
+
+  const active = activeId && playlists[activeId] ? playlists[activeId] : null;
+  if (!active || !active.url) return; // rien à faire
+
+  // 2) Appeler Xtream pour récupérer exp_date (en secondes)
+  const creds = parseXtreamUrl(active.url);
+  if (!creds) return;
+
+  const apiBase = buildPlayerApi(creds); // .../player_api.php?username=...&password=...
+  const { expMs } = await fetchXtreamAccountInfo(apiBase); // expMs = exp_date * 1000 (ou NaN)
+  const expiresAtMs = (typeof expMs === 'number' && !Number.isNaN(expMs) && expMs > 0) ? expMs : 0;
+
+  // 3) Écrire dans la playlist elle-même
+  const updates = {};
+  updates[`playlists/${activeId}/expires_at`] = Number(expiresAtMs);
+  updates[`metadata/last_updated`] = Date.now();
+  await baseRef.update(updates);
+
+  console.log('[PlaylistExpiration] OK:', { activeId, expires_at: Number(expiresAtMs) });
+}
 
 /*** Auth ***/
 async function handleLogin(){
@@ -90,6 +122,7 @@ await ref.set({
 });
 
     showPlaylistManager(mac);
+    await syncActivePlaylistExpiration(mac);
   }
 }
 
@@ -102,6 +135,7 @@ function showPlaylistManager(mac){
   loadSubscription(mac);
   loadPlaylists(mac, /*attemptMigrate=*/true);
   _postShowPlaylist(mac);
+  syncActivePlaylistExpiration(mac);
 }
   
 /*** Règles “active” ***/
@@ -127,6 +161,7 @@ async function setActivePlaylist(mac, playlistId) {
 
   await baseRef.update(updates);
   await _postSetActivePlaylist(mac);
+  await syncActivePlaylistExpiration(mac);
   await loadPlaylists(mac);
 }
 
