@@ -74,6 +74,7 @@ async function handleLogin(){
     const data = snap.val();
     if (data.password !== password) return alert('Mot de passe incorrect');
     showPlaylistManager(mac);
+    _postLoginAfterCreate(mac);
   } else {
     // Création device + abonnement TRIAL par défaut (10 jours)
     const now = Date.now();
@@ -100,8 +101,9 @@ function showPlaylistManager(mac){
   // Charger abonnement + playlists
   loadSubscription(mac);
   loadPlaylists(mac, /*attemptMigrate=*/true);
+  _postShowPlaylist(mac);
 }
-
+  
 /*** Règles “active” ***/
 // 1ère playlist créée => active
 // Supprimer l’active => la plus ancienne devient active
@@ -124,6 +126,7 @@ async function setActivePlaylist(mac, playlistId) {
   updates[`metadata/last_updated`] = now;
 
   await baseRef.update(updates);
+  await _postSetActivePlaylist(mac);
   await loadPlaylists(mac);
 }
 
